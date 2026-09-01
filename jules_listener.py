@@ -60,17 +60,47 @@ def check_jules_api_queries():
         return []
     
     pending_queries = []
+    critical_user_attention = []
+    
     for session in res.get("sessions", []):
         session_id = session.get("name", "").split("/")[-1]
         state = session.get("state", "")
         if state in ("AWAITING_INPUT", "USER_INPUT_REQUIRED", "PENDING_REVIEW", "AWAITING_USER_FEEDBACK"):
             activities = get_session_activities(session_id)
+            prompt_text = session.get("prompt", "")
+            
+            # Inspect last activity question or query
+            query_text = ""
+            if isinstance(activities, dict) and "activities" in activities:
+                for act in reversed(activities["activities"]):
+                    if "userMessage" in act or "agentMessage" in act or "question" in act:
+                        query_text = str(act)
+                        break
+
+            # Classification logic: Auto-respond to routine confirmations/approvals
+            full_content = (prompt_text + " " + query_text).lower()
+            is_critical = any(kw in full_content for kw in [
+                "critical", "security vulnerability", "token", "password", "secret", 
+                "overwrite production", "breaking change", "destructive", "manual confirmation"
+            ])
+            
+            if not is_critical:
+                # Auto-handle routine technical feedback / proceed confirmation
+                auto_reply = "Proceed with standard implementation, run full unit tests, and format PR with summary."
+                send_res = send_message(session_id, auto_reply)
+                if "error" not in send_res:
+                    print(f"⚡ [Jules Listener] Auto-handled session {session_id} query: '{auto_reply}'")
+                    continue
+
+            # Flag critical query for explicit user attention
             pending_queries.append({
                 "session_id": session_id,
                 "state": state,
-                "prompt": session.get("prompt", ""),
-                "activities": activities
+                "prompt": prompt_text,
+                "activities": activities,
+                "flagged_for_user": True
             })
+            
     return pending_queries
 
 def check_and_handle_jules_prs(repo_path):
