@@ -120,6 +120,27 @@ def check_jules_api_queries():
                 send_res = send_message(session_id, auto_reply)
                 if "error" not in send_res:
                     print(f"⚡ [Jules Listener] Auto-handled session {session_id} query: '{auto_reply}'")
+                    # Log AGY processing action for TUI inspection
+                    try:
+                        log_file = os.path.expanduser("~/.config/jules/agy_actions.json")
+                        os.makedirs(os.path.dirname(log_file), exist_ok=True)
+                        actions = {}
+                        if os.path.exists(log_file):
+                            with open(log_file, "r") as f:
+                                actions = json.load(f)
+                        if session_id not in actions:
+                            actions[session_id] = []
+                        import time
+                        actions[session_id].append({
+                            "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
+                            "action": "AUTO_REPLY",
+                            "message": auto_reply,
+                            "query": query_text[:200]
+                        })
+                        with open(log_file, "w") as f:
+                            json.dump(actions, f, indent=2)
+                    except Exception:
+                        pass
                     continue
 
             # Flag critical query for explicit user attention

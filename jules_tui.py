@@ -56,6 +56,7 @@ def draw_menu(stdscr):
 
     selected_idx = 0
     sessions_cache = []
+    details_cache = {}
     last_fetch = 0
     action_msg = ""
     cfg = load_config()
@@ -103,17 +104,25 @@ def draw_menu(stdscr):
         stdscr.addstr(1, 0, mode_str.center(width)[:width])
         stdscr.attroff(curses.color_pair(1) | curses.A_BOLD)
 
-        # Fetch sessions periodically or on start
+        # Fetch and preload all sessions & activities into memory
         now = time.time()
         if now - last_fetch > 10 or not sessions_cache:
             res = list_sessions(include_archived=view_archived)
             raw_sessions = res.get("sessions", []) if isinstance(res, dict) else []
             if view_archived:
                 sessions_cache = [s for s in raw_sessions if s.get("state") in ("ARCHIVED", "COMPLETED", "SUCCEEDED", "RESOLVED", "MERGED", "CLOSED")]
-                # Sort archived sessions chronologically by when they were archived (updateTime)
                 sessions_cache.sort(key=lambda x: x.get("updateTime") or x.get("createTime") or "")
             else:
                 sessions_cache = [s for s in raw_sessions if s.get("state") not in ("ARCHIVED", "CLOSED")]
+            
+            # Preload full activities for all cached sessions
+            for s in sessions_cache:
+                sid = s.get("id") or s.get("name", "").split("/")[-1]
+                if sid not in details_cache:
+                    details_cache[sid] = {
+                        "session": s,
+                        "activities": get_session_activities(sid)
+                    }
             last_fetch = now
 
         # Multi-line footer keybindings bar wrapping calculation
@@ -281,7 +290,8 @@ def draw_menu(stdscr):
         elif key in (curses.KEY_ENTER, 10, 13) and sessions_cache:
             curr_s = sessions_cache[selected_idx]
             sid = curr_s.get("id") or curr_s.get("name", "").split("/")[-1]
-            action_msg = prompt_reply(stdscr, sid, selected_idx + 1)
+            pre_data = details_cache.get(sid)
+            action_msg = prompt_reply(stdscr, sid, selected_idx + 1, preloaded_data=pre_data)
             last_fetch = 0
 def toggle_systemd_service():
     check = subprocess.run(["systemctl", "--user", "is-active", "jules-listener.service"], capture_output=True, text=True)
@@ -332,14 +342,30 @@ def toggle_systemd_autostart():
 
 import textwrap
 
-def prompt_reply(stdscr, session_id, local_num):
-    # Pre-fetch session activities and session details ONCE upon entering the modal
-    activities = get_session_activities(session_id)
-    sess = _make_request(f"sessions/{session_id}") if '_make_request' in globals() else {}
+def prompt_reply(stdscr, session_id, local_num, preloaded_data=None):
+    # Use preloaded details if available, otherwise fetch ONCE
+    if preloaded_data:
+        sess = preloaded_data.get("session", {})
+        activities = preloaded_data.get("activities", {})
+    else:
+        activities = get_session_activities(session_id)
+        sess = _make_request(f"sessions/{session_id}") if '_make_request' in globals() else {}
     
+    # Read persistent AGY action log for this session
+    agy_logs = []
+    try:
+        log_file = os.path.expanduser("~/.config/jules/agy_actions.json")
+        if os.path.exists(log_file):
+            with open(log_file, "r") as f:
+                all_actions = json.load(f)
+                agy_logs = all_actions.get(session_id, [])
+    except Exception:
+        pass
+
     # Full screen modal loop (blocking, no timeout, handles resize)
     stdscr.timeout(-1)
     input_text = ""
+    reply_active = False
     status_err = ""
 
     while True:
@@ -357,8 +383,18 @@ def prompt_reply(stdscr, session_id, local_num):
         prompt_raw = sess.get("prompt", "")
         if prompt_raw:
             q_lines.append("--- Original Task Prompt ---")
-            for pl in prompt_raw.splitlines()[:6]:
+            for pl in prompt_raw.splitlines()[:4]:
                 q_lines.extend(textwrap.wrap(pl, max_line_width) or [""])
+
+        # Render AGY Processing & Auto-Handling History Log
+        if agy_logs:
+            q_lines.append("")
+            q_lines.append("=== 🤖 AGY PROCESSING & AUTOMATED ACTIONS LOG ===")
+            for log_entry in agy_logs:
+                ts = log_entry.get("timestamp", "")
+                act = log_entry.get("action", "PROCESSED")
+                msg = log_entry.get("message", "")
+                q_lines.extend(textwrap.wrap(f"[{ts}] {act}: {msg}", max_line_width))
 
         if isinstance(activities, dict) and "activities" in activities:
             # Extract last ending agent message / question first
@@ -398,7 +434,7 @@ def prompt_reply(stdscr, session_id, local_num):
 
             if last_msg:
                 q_lines.append("")
-                q_lines.append("=== LATEST JULES AGENT QUESTION / MESSAGE ===")
+                q_lines.append("=== 💬 LATEST JULES AGENT QUESTION / MESSAGE ===")
                 for l in last_msg.splitlines():
                     wrapped_sub = textwrap.wrap(l, max_line_width)
                     if wrapped_sub:
@@ -407,18 +443,18 @@ def prompt_reply(stdscr, session_id, local_num):
                         q_lines.append("")
 
         # Modal Header
-        header = f" ❓ JULES QUERY RESOLUTION PANEL [#{local_num}] "
+        header = f" 🔍 SESSION INSPECTION & LOGS [#{local_num}] "
         stdscr.attron(curses.color_pair(5) | curses.A_BOLD)
         stdscr.addstr(0, 0, header[:width].center(width))
         stdscr.attroff(curses.color_pair(5) | curses.A_BOLD)
 
         # Draw content panel
         stdscr.attron(curses.color_pair(3))
-        stdscr.addstr(2, 2, "QUERY DETAILS & LATEST JULES QUESTION:", curses.A_BOLD)
+        stdscr.addstr(2, 2, "SESSION DETAILS, AGY LOGS & JULES QUERY:", curses.A_BOLD)
         stdscr.attroff(curses.color_pair(3))
 
         # Calculate max lines that fit above input prompt
-        max_lines_allowed = max(3, height - 8)
+        max_lines_allowed = max(3, height - (8 if reply_active else 6))
         
         # Display the bottom-most lines of q_lines if content exceeds available height
         if len(q_lines) > max_lines_allowed:
@@ -429,16 +465,22 @@ def prompt_reply(stdscr, session_id, local_num):
         for i, line_str in enumerate(display_lines):
             stdscr.addstr(4 + i, 4, line_str[:width-5])
 
-        # Input Prompt area at bottom
-        prompt_y = max(6, height - 4)
-        stdscr.attron(curses.color_pair(1) | curses.A_BOLD)
-        stdscr.addstr(prompt_y, 2, f"Your Reply (Press ENTER to send, ESC to cancel):"[:width-4])
-        stdscr.attroff(curses.color_pair(1) | curses.A_BOLD)
+        # Bottom Controls / Reply Prompt area
+        if reply_active:
+            prompt_y = max(6, height - 4)
+            stdscr.attron(curses.color_pair(1) | curses.A_BOLD)
+            stdscr.addstr(prompt_y, 2, "Your Reply (Press ENTER to send, ESC to cancel reply mode):"[:width-4])
+            stdscr.attroff(curses.color_pair(1) | curses.A_BOLD)
 
-        input_display = f"> {input_text}"[:width-4]
-        stdscr.attron(curses.A_REVERSE)
-        stdscr.addstr(prompt_y + 1, 2, f"{input_display:<{width-4}}")
-        stdscr.attroff(curses.A_REVERSE)
+            input_display = f"> {input_text}"[:width-4]
+            stdscr.attron(curses.color_pair(5) | curses.A_BOLD)
+            stdscr.addstr(prompt_y + 1, 2, f"{input_display:<{width-4}}")
+            stdscr.attroff(curses.color_pair(5) | curses.A_BOLD)
+        else:
+            prompt_y = max(6, height - 2)
+            stdscr.attron(curses.color_pair(1) | curses.A_BOLD)
+            stdscr.addstr(prompt_y, 0, "Press [r] to type reply | Press [ESC] to return to session list".center(width)[:width])
+            stdscr.attroff(curses.color_pair(1) | curses.A_BOLD)
 
         if status_err:
             stdscr.attron(curses.color_pair(4))
@@ -452,9 +494,19 @@ def prompt_reply(stdscr, session_id, local_num):
             curses.update_lines_cols()
             continue
         elif ch == 27:  # ESC key
-            stdscr.timeout(1000)
-            return "Cancelled query resolution modal."
-        elif ch in (curses.KEY_ENTER, 10, 13):
+            if reply_active:
+                reply_active = False
+                input_text = ""
+                status_err = ""
+                continue
+            else:
+                stdscr.timeout(1000)
+                return "Exited session inspection panel."
+        elif not reply_active and ch in (ord('r'), ord('R')):
+            reply_active = True
+            status_err = ""
+            continue
+        elif reply_active and ch in (curses.KEY_ENTER, 10, 13):
             if input_text.strip():
                 res = send_message(session_id, input_text.strip())
                 stdscr.timeout(1000)
@@ -463,9 +515,9 @@ def prompt_reply(stdscr, session_id, local_num):
                 return f"Error sending message: {res.get('error')}"
             else:
                 status_err = "Please enter a non-empty response or press ESC to cancel."
-        elif ch in (curses.KEY_BACKSPACE, 127, 8):
+        elif reply_active and ch in (curses.KEY_BACKSPACE, 127, 8):
             input_text = input_text[:-1]
-        elif 32 <= ch <= 126:
+        elif reply_active and 32 <= ch <= 126:
             input_text += chr(ch)
 
 def kill_previous_tui_instances():
