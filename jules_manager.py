@@ -94,7 +94,7 @@ def create_session(prompt, source_name, branch="main"):
 
 def get_session_activities(session_id):
     """Retrieves activity log and questions for a session."""
-    return _make_request(f"sessions/{session_id}/activities")
+    return _make_request(f"sessions/{session_id}/activities?pageSize=500")
 
 def send_message(session_id, message_text):
     """Sends a user response/message back to an active session."""

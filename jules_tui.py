@@ -240,6 +240,10 @@ def toggle_systemd_autostart():
 import textwrap
 
 def prompt_reply(stdscr, session_id):
+    # Pre-fetch session activities and session details ONCE upon entering the modal
+    activities = get_session_activities(session_id)
+    sess = _make_request(f"sessions/{session_id}") if '_make_request' in globals() else {}
+    
     # Full screen modal loop (blocking, no timeout, handles resize)
     stdscr.timeout(-1)
     input_text = ""
@@ -249,9 +253,6 @@ def prompt_reply(stdscr, session_id):
         height, width = stdscr.getmaxyx()
         stdscr.clear()
 
-        activities = get_session_activities(session_id)
-        sess = _make_request(f"sessions/{session_id}") if '_make_request' in globals() else {}
-        
         # Build query lines with dynamic word wrapping based on current width
         max_line_width = max(20, width - 8)
         q_lines = []
