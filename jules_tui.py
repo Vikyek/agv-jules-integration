@@ -122,9 +122,9 @@ def draw_menu(stdscr):
 
         # Multi-line footer keybindings bar wrapping calculation
         if width < 80:
-            raw_tips = f"[s] {'stop' if svc_active else 'start'} | [b] auto | [h] action history | [v] archived sessions | [a] archive | [q] quit"
+            raw_tips = f"[s] {'stop' if svc_active else 'start'} | [b] auto | [w] web | [h] action history | [v] archived | [q] quit"
         else:
-            raw_tips = f"Keybindings: [s] {'stop' if svc_active else 'start'} service | [b] autostart | [h] action history log | [v] archived sessions collection | [a] archive | [q] quit"
+            raw_tips = f"Keybindings: [s] {'stop' if svc_active else 'start'} service | [b] autostart | [w] open Jules web | [h] action history log | [v] archived collection | [q] quit"
 
         footer_lines = textwrap.wrap(raw_tips, max(20, width - 4)) or [raw_tips]
         footer_height = len(footer_lines)
@@ -259,6 +259,15 @@ def draw_menu(stdscr):
                 last_fetch = 0
             else:
                 action_msg = "Cancelled autostart toggle."
+        elif key in (ord('w'), ord('W')):
+            import webbrowser
+            url = "https://jules.google.com"
+            if sessions_cache and selected_idx < len(sessions_cache):
+                curr_s = sessions_cache[selected_idx]
+                sid = curr_s.get("id") or curr_s.get("name", "").split("/")[-1]
+                url = f"https://jules.google.com/task/{sid}"
+            webbrowser.open(url)
+            action_msg = f"🌐 Opened Jules web page: {url}"
         elif key in (ord('h'), ord('H')):
             action_msg = prompt_action_history_panel(stdscr)
             last_fetch = 0
