@@ -110,11 +110,10 @@ def draw_menu(stdscr):
             raw_sessions = res.get("sessions", []) if isinstance(res, dict) else []
             if view_archived:
                 sessions_cache = [s for s in raw_sessions if s.get("state") in ("ARCHIVED", "COMPLETED", "SUCCEEDED", "RESOLVED", "MERGED", "CLOSED")]
+                # Sort archived sessions chronologically by when they were archived (updateTime)
+                sessions_cache.sort(key=lambda x: x.get("updateTime") or x.get("createTime") or "")
             else:
                 sessions_cache = [s for s in raw_sessions if s.get("state") not in ("ARCHIVED", "CLOSED")]
-                
-            # Sort chronologically by createTime / updateTime
-            sessions_cache.sort(key=lambda x: x.get("createTime") or x.get("updateTime") or "")
             last_fetch = now
 
         # Multi-line footer keybindings bar wrapping calculation
