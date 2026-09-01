@@ -521,10 +521,11 @@ def prompt_reply(stdscr, session_id, local_num, preloaded_data=None):
             input_text += chr(ch)
 
 def kill_previous_tui_instances():
-    """Closes any other running jules_tui.py process instances (excluding self)."""
+    """Closes any other running jules_tui.py / jules-tui process instances and Kitty wrapper windows (excluding self)."""
     my_pid = os.getpid()
     try:
-        res = subprocess.run(["pgrep", "-f", "jules_tui.py"], capture_output=True, text=True)
+        # 1. Kill python3 / jules_tui.py processes
+        res = subprocess.run(["pgrep", "-f", "jules_tui|jules-tui"], capture_output=True, text=True)
         if res.returncode == 0:
             for pid_str in res.stdout.strip().split():
                 try:
