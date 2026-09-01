@@ -115,8 +115,8 @@ def draw_menu(stdscr):
                 title = s.get("title") or s.get("prompt", "").replace("\n", " ")
                 display_title = title[:width - 48]
 
-                # Processing indicator status check
-                is_processing = state in ("IN_PROGRESS", "RUNNING", "EXECUTING", "ANALYZING", "GENERATING_PLAN")
+                # Processing indicator status check: only animate if service is active and state is in progress
+                is_processing = svc_active and state in ("IN_PROGRESS", "RUNNING", "EXECUTING", "ANALYZING", "GENERATING_PLAN")
                 proc_icon = f"{frame} " if is_processing else "   "
 
                 if "COMPLETED" in state or "SUCCEEDED" in state or "RESOLVED" in state:
