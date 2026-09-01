@@ -4,7 +4,7 @@ After=network.target
 
 [Service]
 Type=simple
-ExecStart=/usr/bin/python3 %h/Projects/agy-vules-integration/jules_listener.py --interval 60
+ExecStart=/usr/bin/python3 %h/Projects/agv-jules-integration/jules_listener.py --interval 60
 Restart=always
 RestartSec=30
 Environment="PYTHONUNBUFFERED=1"
