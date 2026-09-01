@@ -469,7 +469,24 @@ def prompt_reply(stdscr, session_id, local_num):
         elif 32 <= ch <= 126:
             input_text += chr(ch)
 
+def kill_previous_tui_instances():
+    """Closes any other running jules_tui.py process instances (excluding self)."""
+    my_pid = os.getpid()
+    try:
+        res = subprocess.run(["pgrep", "-f", "jules_tui.py"], capture_output=True, text=True)
+        if res.returncode == 0:
+            for pid_str in res.stdout.strip().split():
+                try:
+                    pid = int(pid_str)
+                    if pid != my_pid:
+                        os.kill(pid, 9)
+                except Exception:
+                    pass
+    except Exception:
+        pass
+
 def main():
+    kill_previous_tui_instances()
     try:
         curses.wrapper(draw_menu)
     except KeyboardInterrupt:
