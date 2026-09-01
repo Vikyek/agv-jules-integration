@@ -10,6 +10,7 @@ import os
 import sys
 import json
 import time
+import subprocess
 from jules_manager import list_sessions, get_session_activities, send_message, archive_session
 
 CONFIG_FILE = os.path.expanduser("~/.config/jules/config.json")
@@ -53,7 +54,11 @@ def draw_menu(stdscr):
         except Exception:
             pass
 
+    selected_idx = 0
+    sessions_cache = []
+    last_fetch = 0
     action_msg = ""
+    cfg = load_config()
 
     while True:
         stdscr.clear()
