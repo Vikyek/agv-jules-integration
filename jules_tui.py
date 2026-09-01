@@ -122,9 +122,9 @@ def draw_menu(stdscr):
 
         # Multi-line footer keybindings bar wrapping calculation
         if width < 80:
-            raw_tips = f"[s] {'stop' if svc_active else 'start'} | [b] auto | [h] history panel | [a] archive | [q] quit"
+            raw_tips = f"[s] {'stop' if svc_active else 'start'} | [b] auto | [h] action history | [v] archived sessions | [a] archive | [q] quit"
         else:
-            raw_tips = f"Keybindings: [s] {'stop' if svc_active else 'start'} service | [b] autostart | [h] history panel | [a] archive | [q] quit"
+            raw_tips = f"Keybindings: [s] {'stop' if svc_active else 'start'} service | [b] autostart | [h] action history log | [v] archived sessions collection | [a] archive | [q] quit"
 
         footer_lines = textwrap.wrap(raw_tips, max(20, width - 4)) or [raw_tips]
         footer_height = len(footer_lines)
@@ -137,7 +137,7 @@ def draw_menu(stdscr):
         curr_y = 5
 
         if not sessions_cache:
-            stdscr.addstr(5, 2, f"No {'archived' if view_archived else 'active'} sessions found.", curses.color_pair(3))
+            stdscr.addstr(5, 2, "No active sessions found.", curses.color_pair(3))
         else:
             for i in range(len(sessions_cache)):
                 if curr_y >= 4 + available_height:
@@ -260,6 +260,9 @@ def draw_menu(stdscr):
             else:
                 action_msg = "Cancelled autostart toggle."
         elif key in (ord('h'), ord('H')):
+            action_msg = prompt_action_history_panel(stdscr)
+            last_fetch = 0
+        elif key in (ord('v'), ord('V')):
             action_msg = prompt_archived_panel(stdscr)
             last_fetch = 0
         elif key in (ord('r'), ord('R')):
@@ -327,8 +330,79 @@ def prompt_confirm(stdscr, question):
             stdscr.timeout(1000)
             return False
 
+def prompt_action_history_panel(stdscr):
+    """Displays a dedicated full-screen Global Action History Log panel (Query answers, PR actions, Sourcery suggestions, Merges, Branch deletions, Session archiving events)."""
+    stdscr.timeout(-1)
+    while True:
+        height, width = stdscr.getmaxyx()
+        stdscr.clear()
+
+        # Header
+        header = " 📜 GLOBAL ACTION & EVENT HISTORY LOG "
+        stdscr.attron(curses.color_pair(5) | curses.A_BOLD)
+        stdscr.addstr(0, 0, header[:width].center(width))
+        stdscr.attroff(curses.color_pair(5) | curses.A_BOLD)
+
+        footer_tips = "Press [ESC] to return to active sessions list"
+        stdscr.attron(curses.color_pair(1))
+        stdscr.addstr(height - 1, 0, footer_tips.center(width)[:width-1])
+        stdscr.attroff(curses.color_pair(1))
+
+        # Read global action logs
+        log_entries = []
+        try:
+            log_file = os.path.expanduser("~/.config/jules/agy_actions.json")
+            if os.path.exists(log_file):
+                with open(log_file, "r") as f:
+                    all_actions = json.load(f)
+                    for sid, events in all_actions.items():
+                        for ev in events:
+                            log_entries.append({
+                                "session_id": sid,
+                                "timestamp": ev.get("timestamp", ""),
+                                "action": ev.get("action", "EVENT"),
+                                "message": ev.get("message", ""),
+                                "query": ev.get("query", "")
+                            })
+        except Exception:
+            pass
+
+        log_entries.sort(key=lambda x: x.get("timestamp", ""), reverse=True)
+
+        stdscr.attron(curses.color_pair(3) | curses.A_BOLD)
+        stdscr.addstr(2, 2, "RECORDED ACTIONS (QUERY REPLIES, PR ACTIONS, MERGES, ARCHIVE EVENTS):")
+        stdscr.attroff(curses.color_pair(3) | curses.A_BOLD)
+
+        max_line_width = max(20, width - 6)
+        formatted_lines = []
+
+        if not log_entries:
+            formatted_lines.append("No recorded action history found.")
+        else:
+            for item in log_entries:
+                ts = item["timestamp"]
+                act = item["action"]
+                msg = item["message"]
+                sid = item["session_id"][:12]
+                formatted_lines.extend(textwrap.wrap(f"[{ts}] [{act}] (Session {sid}): {msg}", max_line_width))
+                if item.get("query"):
+                    formatted_lines.extend(textwrap.wrap(f"   ↳ Query context: {item['query'][:120]}", max_line_width))
+                formatted_lines.append("")
+
+        available_height = max(3, height - 5)
+        display_lines = formatted_lines[:available_height]
+
+        for idx, l in enumerate(display_lines):
+            stdscr.addstr(4 + idx, 3, l[:width-4])
+
+        stdscr.refresh()
+        ch = stdscr.getch()
+        if ch == 27:  # ESC key
+            stdscr.timeout(1000)
+            return "Returned to active sessions."
+
 def prompt_archived_panel(stdscr):
-    """Displays a dedicated full-screen Archived Session History panel with unarchive capabilities."""
+    """Displays a dedicated full-screen Archived Sessions Collection panel (stored archived session objects)."""
     stdscr.timeout(-1)
     selected_idx = 0
     status_msg = ""
@@ -338,7 +412,7 @@ def prompt_archived_panel(stdscr):
         stdscr.clear()
 
         # Header
-        header = " 📦 ARCHIVED SESSION HISTORY PANEL (CHRONOLOGICAL) "
+        header = " 📦 ARCHIVED SESSIONS COLLECTION "
         stdscr.attron(curses.color_pair(5) | curses.A_BOLD)
         stdscr.addstr(0, 0, header[:width].center(width))
         stdscr.attroff(curses.color_pair(5) | curses.A_BOLD)
@@ -363,7 +437,7 @@ def prompt_archived_panel(stdscr):
         curr_y = 2
 
         if not archived_sessions:
-            stdscr.addstr(3, 2, "No archived sessions found in history.", curses.color_pair(3))
+            stdscr.addstr(3, 2, "No archived sessions found in collection.", curses.color_pair(3))
         else:
             if selected_idx >= len(archived_sessions):
                 selected_idx = max(0, len(archived_sessions) - 1)
