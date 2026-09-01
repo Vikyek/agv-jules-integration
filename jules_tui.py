@@ -60,6 +60,12 @@ def draw_menu(stdscr):
     action_msg = ""
     cfg = load_config()
 
+    # Startup check: If system autostart is disabled, open with listener turned off
+    enabled_check = subprocess.run(["systemctl", "--user", "is-enabled", "jules-listener.service"], capture_output=True, text=True)
+    is_autostart = "enabled" in enabled_check.stdout.strip()
+    if not is_autostart:
+        subprocess.run(["systemctl", "--user", "stop", "jules-listener.service"], capture_output=True, text=True)
+
     while True:
         stdscr.clear()
         height, width = stdscr.getmaxyx()
@@ -69,6 +75,10 @@ def draw_menu(stdscr):
         svc_active = svc_check.stdout.strip() == "active"
         svc_str = "RUNNING" if svc_active else "STOPPED"
 
+        auto_check = subprocess.run(["systemctl", "--user", "is-enabled", "jules-listener.service"], capture_output=True, text=True)
+        auto_enabled = "enabled" in auto_check.stdout.strip()
+        auto_str = "ENABLED" if auto_enabled else "DISABLED"
+
         # Header
         header_str = " 🤖 GOOGLE JULES API MANAGER & LISTENER TUI "
         stdscr.attron(curses.color_pair(5) | curses.A_BOLD)
@@ -76,7 +86,7 @@ def draw_menu(stdscr):
         stdscr.attroff(curses.color_pair(5) | curses.A_BOLD)
 
         # Mode line
-        mode_str = f" Mode: [{cfg.get('mode', 'continuous').upper()}] | Service: [{svc_str}] | Refreshing sessions... "
+        mode_str = f" Mode: [{cfg.get('mode', 'continuous').upper()}] | Service: [{svc_str}] | Autostart: [{auto_str}] | Refreshing sessions... "
         stdscr.attron(curses.color_pair(1))
         stdscr.addstr(1, 2, mode_str[:width-4])
         stdscr.attroff(curses.color_pair(1))
@@ -120,7 +130,7 @@ def draw_menu(stdscr):
             stdscr.attroff(curses.color_pair(3) | curses.A_BOLD)
 
         # Persistent Footer / Keybindings bar
-        key_tips = f"Keybindings: [s] {'stop' if svc_active else 'start'} service | [m] mode | [r] refresh | [a] archive | [q] quit"
+        key_tips = f"Keybindings: [s] {'stop' if svc_active else 'start'} service | [b] {'disable' if auto_enabled else 'enable'} autostart | [m] mode | [r] refresh | [a] archive | [q] quit"
         stdscr.attron(curses.color_pair(1))
         stdscr.addstr(height - 2, 2, key_tips[:width-4])
         stdscr.attroff(curses.color_pair(1))
@@ -130,6 +140,9 @@ def draw_menu(stdscr):
         key = stdscr.getch()
 
         if key in (ord('q'), ord('Q')):
+            # On TUI exit: If system autostart is disabled, automatically close background service
+            if not auto_enabled:
+                subprocess.run(["systemctl", "--user", "stop", "jules-listener.service"], capture_output=True, text=True)
             break
         elif key == curses.KEY_UP and selected_idx > 0:
             selected_idx -= 1
@@ -138,10 +151,9 @@ def draw_menu(stdscr):
         elif key in (ord('s'), ord('S')):
             action_msg = toggle_systemd_service()
             last_fetch = 0
-        # TODO: Future Reimplementation - Add Knowledge option via jules_scraper
-        # elif key in (ord('k'), ord('K')):
-        #     action_msg = prompt_knowledge_update(stdscr)
-        #     last_fetch = 0
+        elif key in (ord('b'), ord('B')):
+            action_msg = toggle_systemd_autostart()
+            last_fetch = 0
         elif key in (ord('r'), ord('R')):
             last_fetch = 0
             action_msg = "Refreshed session list & cookies."
@@ -163,7 +175,6 @@ def draw_menu(stdscr):
             sid = curr_s.get("id") or curr_s.get("name", "").split("/")[-1]
             action_msg = prompt_reply(stdscr, sid)
             last_fetch = 0
-
 def toggle_systemd_service():
     check = subprocess.run(["systemctl", "--user", "is-active", "jules-listener.service"], capture_output=True, text=True)
     is_active = check.stdout.strip() == "active"
@@ -173,6 +184,16 @@ def toggle_systemd_service():
     else:
         res = subprocess.run(["systemctl", "--user", "start", "jules-listener.service"], capture_output=True, text=True)
         return "🚀 Started background Jules listener service."
+
+def toggle_systemd_autostart():
+    check = subprocess.run(["systemctl", "--user", "is-enabled", "jules-listener.service"], capture_output=True, text=True)
+    is_enabled = "enabled" in check.stdout.strip()
+    if is_enabled:
+        res = subprocess.run(["systemctl", "--user", "disable", "jules-listener.service"], capture_output=True, text=True)
+        return "🔒 Disabled system autostart for Jules listener."
+    else:
+        res = subprocess.run(["systemctl", "--user", "enable", "jules-listener.service"], capture_output=True, text=True)
+        return "⚡ Enabled system autostart for Jules listener."
 
 # TODO: Future Reimplementation - Prompt user for Knowledge rule and update via jules_scraper
 # def prompt_knowledge_update(stdscr):
