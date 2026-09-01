@@ -209,14 +209,40 @@ def check_and_handle_jules_prs(repo_path):
                 if test_chk.returncode != 0:
                     syntax_clean = False
 
-            if syntax_clean and mergeable == "MERGEABLE" and not has_review_issues:
-                merge_cmd = ["gh", "pr", "merge", str(number), "--merge"]
+            if syntax_clean and not has_review_issues:
+                # Attempt gh pr merge
+                merge_cmd = ["gh", "pr", "merge", str(number), "--merge", "--auto"]
                 m_res = subprocess.run(merge_cmd, cwd=repo_path, capture_output=True, text=True)
                 merged = m_res.returncode == 0
+
+                # Fallback: If gh pr merge fails (e.g. rate limit), try local git checkout & merge
+                if not merged and mergeable in ("MERGEABLE", "CLEAN", "UNKNOWN"):
+                    try:
+                        subprocess.run(["git", "fetch", "origin"], cwd=repo_path, capture_output=True)
+                        reb = subprocess.run(["git", "rebase", "origin/main", branch], cwd=repo_path, capture_output=True)
+                        if reb.returncode == 0:
+                            chk_main = subprocess.run(["git", "checkout", "main"], cwd=repo_path, capture_output=True)
+                            mg_res = subprocess.run(["git", "merge", "--ff-only", branch], cwd=repo_path, capture_output=True)
+                            if mg_res.returncode == 0:
+                                psh = subprocess.run(["git", "push", "origin", "main"], cwd=repo_path, capture_output=True)
+                                merged = psh.returncode == 0
+                                if merged:
+                                    # Close remote PR via gh CLI or API
+                                    subprocess.run(["gh", "pr", "close", str(number)], cwd=repo_path, capture_output=True)
+                        else:
+                            subprocess.run(["git", "rebase", "--abort"], cwd=repo_path, capture_output=True)
+                    except Exception:
+                        pass
+
                 if merged:
-                    from jules_manager import log_action
+                    from jules_manager import log_action, archive_session
                     r_name = os.path.basename(repo_path)
                     log_action(f"pr-{number}", "MERGE_PR", f"Merged PR #{number} into {r_name}:{branch}", title=title, repo=r_name, branch=branch, action_by="auto")
+                    # Extract session ID from branch name if present and auto-archive
+                    if "-" in branch:
+                        possible_sid = branch.split("-")[-1]
+                        if possible_sid.isdigit() and len(possible_sid) >= 15:
+                            archive_session(possible_sid, action_by="auto", title=title, repo=r_name, branch=branch)
             else:
                 merged = False
                 if has_review_issues:
