@@ -39,18 +39,18 @@ def draw_menu(stdscr):
     except Exception:
         pass
     try:
-        curses.init_pair(1, curses.COLOR_CYAN, -1)
-        curses.init_pair(2, curses.COLOR_GREEN, -1)
-        curses.init_pair(3, curses.COLOR_YELLOW, -1)
-        curses.init_pair(4, curses.COLOR_RED, -1)
-        curses.init_pair(5, curses.COLOR_BLACK, curses.COLOR_CYAN)
+        curses.init_pair(1, curses.COLOR_YELLOW, -1)           # Main text (Yellow)
+        curses.init_pair(2, curses.COLOR_GREEN, -1)            # Completed state (Green)
+        curses.init_pair(3, curses.COLOR_RED, -1)              # Feedback / Warning (Red)
+        curses.init_pair(4, curses.COLOR_RED, curses.COLOR_YELLOW) # Topbar: Yellow background with Red text
+        curses.init_pair(5, curses.COLOR_BLACK, curses.COLOR_YELLOW) # Highlighted selection: Yellow background with Black text
     except Exception:
         try:
-            curses.init_pair(1, curses.COLOR_CYAN, curses.COLOR_BLACK)
+            curses.init_pair(1, curses.COLOR_YELLOW, curses.COLOR_BLACK)
             curses.init_pair(2, curses.COLOR_GREEN, curses.COLOR_BLACK)
-            curses.init_pair(3, curses.COLOR_YELLOW, curses.COLOR_BLACK)
-            curses.init_pair(4, curses.COLOR_RED, curses.COLOR_BLACK)
-            curses.init_pair(5, curses.COLOR_BLACK, curses.COLOR_CYAN)
+            curses.init_pair(3, curses.COLOR_RED, curses.COLOR_BLACK)
+            curses.init_pair(4, curses.COLOR_RED, curses.COLOR_YELLOW)
+            curses.init_pair(5, curses.COLOR_BLACK, curses.COLOR_YELLOW)
         except Exception:
             pass
 
@@ -66,6 +66,8 @@ def draw_menu(stdscr):
     if not is_autostart:
         subprocess.run(["systemctl", "--user", "stop", "jules-listener.service"], capture_output=True, text=True)
 
+    listen_frames = ["📡", "🛰️", "⚡", "✨"]
+
     while True:
         stdscr.clear()
         height, width = stdscr.getmaxyx()
@@ -79,21 +81,24 @@ def draw_menu(stdscr):
         auto_enabled = "enabled" in auto_check.stdout.strip()
         auto_str = "ENABLED" if auto_enabled else "DISABLED"
 
-        # Header (Centered)
-        header_str = " 🤖 JULES MANAGER " if width < 80 else " 🤖 GOOGLE JULES API MANAGER & LISTENER TUI "
-        stdscr.attron(curses.color_pair(5) | curses.A_BOLD)
-        stdscr.addstr(0, 0, header_str.center(width)[:width])
-        stdscr.attroff(curses.color_pair(5) | curses.A_BOLD)
+        # Animated listener icon
+        listen_icon = listen_frames[int(time.time() * 2) % len(listen_frames)] if svc_active else "💤"
+
+        # Header (Yellow background with Red text, Jules logo 󱚝)
+        header_title = " 󱚝 JULES MANAGER " if width < 80 else " 󱚝 GOOGLE JULES API MANAGER & LISTENER TUI "
+        stdscr.attron(curses.color_pair(4) | curses.A_BOLD)
+        stdscr.addstr(0, 0, header_title.center(width)[:width])
+        stdscr.attroff(curses.color_pair(4) | curses.A_BOLD)
 
         # Mode line (Centered)
         if width < 80:
-            mode_str = f"Mode:[{cfg.get('mode', 'continuous')[:4].upper()}] Svc:[{svc_str}] Auto:[{auto_str[:3]}]"
+            mode_str = f"Mode:[{cfg.get('mode', 'continuous')[:4].upper()}] Svc:[{svc_str} {listen_icon}] Auto:[{auto_str[:3]}]"
         else:
-            mode_str = f"Mode: [{cfg.get('mode', 'continuous').upper()}] | Service: [{svc_str}] | Autostart: [{auto_str}]"
+            mode_str = f"Mode: [{cfg.get('mode', 'continuous').upper()}] | Service: [{svc_str} {listen_icon}] | Autostart: [{auto_str}]"
             
-        stdscr.attron(curses.color_pair(1))
+        stdscr.attron(curses.color_pair(1) | curses.A_BOLD)
         stdscr.addstr(1, 0, mode_str.center(width)[:width])
-        stdscr.attroff(curses.color_pair(1))
+        stdscr.attroff(curses.color_pair(1) | curses.A_BOLD)
 
         # Fetch sessions periodically or on start
         now = time.time()
@@ -170,9 +175,9 @@ def draw_menu(stdscr):
                 # Draw first line with metadata prefix
                 line1 = f"{meta_prefix}{wrapped_title[0]}"[:width-2]
                 if i == selected_idx:
-                    stdscr.attron(curses.A_REVERSE)
+                    stdscr.attron(curses.color_pair(5) | curses.A_BOLD)
                     stdscr.addstr(curr_y, 1, line1)
-                    stdscr.attroff(curses.A_REVERSE)
+                    stdscr.attroff(curses.color_pair(5) | curses.A_BOLD)
                 else:
                     stdscr.attron(color)
                     stdscr.addstr(curr_y, 1, line1)
@@ -186,9 +191,9 @@ def draw_menu(stdscr):
                         break
                     indented_line = f"{' ' * meta_len}{extra_line}"[:width-2]
                     if i == selected_idx:
-                        stdscr.attron(curses.A_REVERSE)
+                        stdscr.attron(curses.color_pair(5) | curses.A_BOLD)
                         stdscr.addstr(curr_y, 1, indented_line)
-                        stdscr.attroff(curses.A_REVERSE)
+                        stdscr.attroff(curses.color_pair(5) | curses.A_BOLD)
                     else:
                         stdscr.attron(color)
                         stdscr.addstr(curr_y, 1, indented_line)
