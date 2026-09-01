@@ -129,12 +129,19 @@ def draw_menu(stdscr):
                 local_num = i + 1
                 state = s.get("state", "UNKNOWN")
                 raw_title = s.get("title", "")
-                if not raw_title:
-                    prompt_lines = [l.strip() for l in s.get("prompt", "").splitlines() if l.strip()]
-                    raw_title = prompt_lines[0] if prompt_lines else "Untitled Session"
-                    # Remove markdown headers like # or 🔒
-                    raw_title = raw_title.lstrip("#").strip()
-                title = raw_title.replace("\n", " ")
+                if not raw_title or len(raw_title) > 100 or "\n" in raw_title:
+                    title_lines = [l.strip() for l in (raw_title or s.get("prompt", "")).splitlines() if l.strip()]
+                    raw_title = title_lines[0] if title_lines else "Untitled Session"
+                    # If first line is a generic header like '# 🔒 Security Vulnerability Fix Task', look for Issue / File details
+                    if ("Security Vulnerability" in raw_title or "Performance Optimization" in raw_title or "Testing Improvement" in raw_title) and len(title_lines) > 1:
+                        for line in title_lines[1:]:
+                            if "Issue:" in line or "File:" in line:
+                                raw_title = line
+                                break
+
+                # Remove markdown headers like # or 🔒 and replace newlines
+                clean_title = raw_title.lstrip("#").strip().replace("\n", " ")
+                title = clean_title
 
                 if "COMPLETED" in state or "SUCCEEDED" in state or "RESOLVED" in state:
                     color = curses.color_pair(2)
