@@ -185,16 +185,24 @@ def draw_menu(stdscr):
         # Action notification message line
         if action_msg:
             msg_y = height - 1 - footer_height
-            stdscr.attron(curses.color_pair(3) | curses.A_BOLD)
-            stdscr.addstr(msg_y, 1, action_msg[:width-2])
-            stdscr.attroff(curses.color_pair(3) | curses.A_BOLD)
+            if 0 <= msg_y < height:
+                try:
+                    stdscr.attron(curses.color_pair(3) | curses.A_BOLD)
+                    stdscr.addstr(msg_y, 1, action_msg[:width-2])
+                    stdscr.attroff(curses.color_pair(3) | curses.A_BOLD)
+                except Exception:
+                    pass
 
-        # Persistent Multi-Line Footer / Keybindings bar (Centered)
+        # Persistent Multi-Line Footer / Keybindings bar (Centered safely)
         for idx, f_line in enumerate(footer_lines):
             f_y = height - footer_height + idx
-            stdscr.attron(curses.color_pair(1))
-            stdscr.addstr(f_y, 0, f_line.center(width)[:width])
-            stdscr.attroff(curses.color_pair(1))
+            if 0 <= f_y < height:
+                try:
+                    stdscr.attron(curses.color_pair(1))
+                    stdscr.addstr(f_y, 0, f_line.center(width)[:width-1])
+                    stdscr.attroff(curses.color_pair(1))
+                except Exception:
+                    pass
         stdscr.attroff(curses.color_pair(1))
 
         stdscr.refresh()
