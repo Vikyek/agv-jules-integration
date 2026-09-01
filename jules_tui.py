@@ -223,59 +223,71 @@ def toggle_systemd_autostart():
 #         return "Updated Knowledge rule."
 #     return "Cancelled Knowledge input (format repo:rule required)."
 
+import textwrap
+
 def prompt_reply(stdscr, session_id):
-    height, width = stdscr.getmaxyx()
-    activities = get_session_activities(session_id)
-    sess = _make_request(f"sessions/{session_id}") if '_make_request' in globals() else {}
-    
-    # Extract complete question text & step details
-    q_lines = []
-    title_str = sess.get("title") or f"Session {session_id[:12]}"
-    if title_str:
-        q_lines.append(f"Title: {title_str}")
-        
-    prompt_raw = sess.get("prompt", "")
-    if prompt_raw:
-        q_lines.append("--- Original Task Prompt ---")
-        q_lines.extend(prompt_raw.splitlines()[:8])
-
-    if isinstance(activities, dict) and "activities" in activities:
-        for act in reversed(activities["activities"]):
-            if "planGenerated" in act and "plan" in act["planGenerated"]:
-                q_lines.append("--- Generated Implementation Plan ---")
-                steps = act["planGenerated"]["plan"].get("steps", [])
-                for idx, s in enumerate(steps):
-                    q_lines.append(f" Step {idx+1}: {s.get('title', '')}")
-                    desc = s.get('description', '')
-                    if desc:
-                        q_lines.append(f"   {desc[:width-10]}")
-                break
-            elif "userMessage" in act:
-                q_lines.append("--- Message ---")
-                q_lines.extend(act["userMessage"].get("text", "").splitlines()[:6])
-                break
-            elif "agentMessage" in act:
-                q_lines.append("--- Agent Message ---")
-                q_lines.extend(act["agentMessage"].get("text", "").splitlines()[:6])
-                break
-
-    # Full screen modal loop (blocking, no timeout)
+    # Full screen modal loop (blocking, no timeout, handles resize)
     stdscr.timeout(-1)
     input_text = ""
     status_err = ""
 
     while True:
+        height, width = stdscr.getmaxyx()
         stdscr.clear()
+
+        activities = get_session_activities(session_id)
+        sess = _make_request(f"sessions/{session_id}") if '_make_request' in globals() else {}
         
+        # Build query lines with dynamic word wrapping based on current width
+        max_line_width = max(20, width - 8)
+        q_lines = []
+        
+        title_str = sess.get("title") or f"Session {session_id[:12]}"
+        if title_str:
+            q_lines.extend(textwrap.wrap(f"Title: {title_str}", max_line_width))
+            
+        prompt_raw = sess.get("prompt", "")
+        if prompt_raw:
+            q_lines.append("--- Original Task Prompt ---")
+            for pl in prompt_raw.splitlines()[:6]:
+                q_lines.extend(textwrap.wrap(pl, max_line_width) or [""])
+
+        if isinstance(activities, dict) and "activities" in activities:
+            # Extract last ending agent progress message / question / evaluation
+            last_msg = ""
+            for act in reversed(activities["activities"]):
+                if "progressUpdated" in act and isinstance(act["progressUpdated"], dict):
+                    desc = act["progressUpdated"].get("description", "")
+                    title = act["progressUpdated"].get("title", "")
+                    if desc or title:
+                        last_msg = f"[{title}]\n{desc}" if title else desc
+                        break
+                elif "agentMessage" in act and isinstance(act["agentMessage"], dict):
+                    last_msg = act["agentMessage"].get("text", "")
+                    break
+                elif "userMessage" in act and isinstance(act["userMessage"], dict):
+                    last_msg = act["userMessage"].get("text", "")
+                    break
+                elif "planGenerated" in act and "plan" in act["planGenerated"]:
+                    steps = act["planGenerated"]["plan"].get("steps", [])
+                    step_strs = [f"Step {idx+1}: {s.get('title', '')}" for idx, s in enumerate(steps)]
+                    last_msg = "Plan Steps:\n" + "\n".join(step_strs)
+                    break
+
+            if last_msg:
+                q_lines.append("--- Latest Jules Agent Question / Evaluation ---")
+                for l in last_msg.splitlines():
+                    q_lines.extend(textwrap.wrap(l, max_line_width) or [""])
+
         # Modal Header
         header = f" ❓ JULES QUERY RESOLUTION PANEL [{session_id[:12]}] "
         stdscr.attron(curses.color_pair(5) | curses.A_BOLD)
-        stdscr.addstr(0, 0, header.center(width))
+        stdscr.addstr(0, 0, header[:width].center(width))
         stdscr.attroff(curses.color_pair(5) | curses.A_BOLD)
 
-        # Draw full query content box
+        # Draw content panel
         stdscr.attron(curses.color_pair(3))
-        stdscr.addstr(2, 2, "QUERY DETAILS & PLAN:", curses.A_BOLD)
+        stdscr.addstr(2, 2, "QUERY DETAILS & LATEST JULES QUESTION:", curses.A_BOLD)
         stdscr.attroff(curses.color_pair(3))
 
         max_display = min(height - 8, len(q_lines))
@@ -284,13 +296,14 @@ def prompt_reply(stdscr, session_id):
             stdscr.addstr(4 + i, 4, line_str)
 
         # Input Prompt area at bottom
-        prompt_y = height - 4
+        prompt_y = max(6, height - 4)
         stdscr.attron(curses.color_pair(1) | curses.A_BOLD)
-        stdscr.addstr(prompt_y, 2, f"Your Reply (Press ENTER to send, ESC to cancel):")
+        stdscr.addstr(prompt_y, 2, f"Your Reply (Press ENTER to send, ESC to cancel):"[:width-4])
         stdscr.attroff(curses.color_pair(1) | curses.A_BOLD)
 
+        input_display = f"> {input_text}"[:width-4]
         stdscr.attron(curses.A_REVERSE)
-        stdscr.addstr(prompt_y + 1, 2, f"> {input_text:<{width-6}}")
+        stdscr.addstr(prompt_y + 1, 2, f"{input_display:<{width-4}}")
         stdscr.attroff(curses.A_REVERSE)
 
         if status_err:
@@ -301,7 +314,10 @@ def prompt_reply(stdscr, session_id):
         stdscr.refresh()
         ch = stdscr.getch()
 
-        if ch == 27:  # ESC key
+        if ch == curses.KEY_RESIZE:
+            curses.update_lines_cols()
+            continue
+        elif ch == 27:  # ESC key
             stdscr.timeout(1000)
             return "Cancelled query resolution modal."
         elif ch in (curses.KEY_ENTER, 10, 13):
