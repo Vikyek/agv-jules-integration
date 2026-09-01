@@ -267,45 +267,46 @@ def prompt_reply(stdscr, session_id):
                 q_lines.extend(textwrap.wrap(pl, max_line_width) or [""])
 
         if isinstance(activities, dict) and "activities" in activities:
-            # Extract last ending agent progress message / question / evaluation
+            # Extract last ending agent message / question first, falling back to progressUpdated
             last_msg = ""
+            # Priority 1: Check for explicit agentMessaged or agentMessage
             for act in reversed(activities["activities"]):
                 if "agentMessaged" in act and isinstance(act["agentMessaged"], dict):
-                    last_msg = act["agentMessaged"].get("agentMessage", "")
-                    if last_msg:
+                    msg_text = act["agentMessaged"].get("agentMessage", "").strip()
+                    if msg_text:
+                        last_msg = msg_text
                         break
                 elif "agentMessage" in act:
-                    if isinstance(act["agentMessage"], dict):
-                        last_msg = act["agentMessage"].get("text", "")
-                    elif isinstance(act["agentMessage"], str):
-                        last_msg = act["agentMessage"]
-                    if last_msg:
+                    msg_text = act["agentMessage"].get("text", "") if isinstance(act["agentMessage"], dict) else str(act["agentMessage"])
+                    if msg_text.strip():
+                        last_msg = msg_text.strip()
                         break
-                elif "userMessaged" in act and isinstance(act["userMessaged"], dict):
-                    last_msg = act["userMessaged"].get("userMessage", "")
-                    if last_msg:
+
+            # Priority 2: If no direct agent message found, check progressUpdated description
+            if not last_msg:
+                for act in reversed(activities["activities"]):
+                    if "progressUpdated" in act and isinstance(act["progressUpdated"], dict):
+                        desc = act["progressUpdated"].get("description", "").strip()
+                        title = act["progressUpdated"].get("title", "").strip()
+                        if desc or title:
+                            last_msg = f"[{title}]\n{desc}" if title else desc
+                            break
+
+            # Priority 3: Check plan steps or user message
+            if not last_msg:
+                for act in reversed(activities["activities"]):
+                    if "userMessaged" in act and isinstance(act["userMessaged"], dict):
+                        last_msg = act["userMessaged"].get("userMessage", "")
+                        if last_msg:
+                            break
+                    elif "planGenerated" in act and "plan" in act["planGenerated"]:
+                        steps = act["planGenerated"]["plan"].get("steps", [])
+                        step_strs = [f"Step {idx+1}: {s.get('title', '')}" for idx, s in enumerate(steps)]
+                        last_msg = "Plan Steps:\n" + "\n".join(step_strs)
                         break
-                elif "userMessage" in act:
-                    if isinstance(act["userMessage"], dict):
-                        last_msg = act["userMessage"].get("text", "")
-                    elif isinstance(act["userMessage"], str):
-                        last_msg = act["userMessage"]
-                    if last_msg:
-                        break
-                elif "progressUpdated" in act and isinstance(act["progressUpdated"], dict):
-                    desc = act["progressUpdated"].get("description", "")
-                    title = act["progressUpdated"].get("title", "")
-                    if desc or title:
-                        last_msg = f"[{title}]\n{desc}" if title else desc
-                        break
-                elif "planGenerated" in act and "plan" in act["planGenerated"]:
-                    steps = act["planGenerated"]["plan"].get("steps", [])
-                    step_strs = [f"Step {idx+1}: {s.get('title', '')}" for idx, s in enumerate(steps)]
-                    last_msg = "Plan Steps:\n" + "\n".join(step_strs)
-                    break
 
             if last_msg:
-                q_lines.append("--- Latest Jules Agent Question / Evaluation ---")
+                q_lines.append("--- Latest Jules Agent Question / Message ---")
                 for l in last_msg.splitlines():
                     q_lines.extend(textwrap.wrap(l, max_line_width) or [""])
 
