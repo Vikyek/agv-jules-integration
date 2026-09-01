@@ -11,7 +11,7 @@ import sys
 import json
 import time
 import subprocess
-from jules_manager import list_sessions, get_session_activities, send_message, archive_session
+from jules_manager import list_sessions, get_session_activities, send_message, archive_session, _make_request
 
 CONFIG_FILE = os.path.expanduser("~/.config/jules/config.json")
 
@@ -227,22 +227,27 @@ def prompt_reply(stdscr, session_id):
     height, width = stdscr.getmaxyx()
     activities = get_session_activities(session_id)
     
-    # Extract last question/query text from activities
+    # Extract question text from planGenerated steps, agent messages, or user messages
     q_text = ""
     if isinstance(activities, dict) and "activities" in activities:
         for act in reversed(activities["activities"]):
-            if "userMessage" in act:
+            if "planGenerated" in act and "plan" in act["planGenerated"]:
+                steps = act["planGenerated"]["plan"].get("steps", [])
+                if steps:
+                    step_titles = [f"Step {idx+1}: {s.get('title', '')}" for idx, s in enumerate(steps)]
+                    q_text = " | ".join(step_titles)
+                    break
+            elif "userMessage" in act:
                 q_text = act["userMessage"].get("text", "")
                 break
             elif "agentMessage" in act:
                 q_text = act["agentMessage"].get("text", "")
                 break
-            elif "prompt" in act:
-                q_text = act.get("prompt", "")
-                break
                 
     if not q_text:
-        q_text = "Awaiting feedback for task."
+        # Fallback to session title or active state prompt
+        sess = _make_request(f"sessions/{session_id}") if '_make_request' in globals() else {}
+        q_text = sess.get("title") or "Awaiting user feedback / approval for plan implementation."
 
     # Clear modal area
     stdscr.addstr(height - 5, 2, " " * (width - 4))
@@ -251,7 +256,7 @@ def prompt_reply(stdscr, session_id):
 
     # Display Jules Question
     stdscr.attron(curses.color_pair(3) | curses.A_BOLD)
-    stdscr.addstr(height - 5, 2, f"❓ Jules Query: {q_text[:width - 20]}")
+    stdscr.addstr(height - 5, 2, f"❓ Jules Question: {q_text[:width - 22]}")
     stdscr.attroff(curses.color_pair(3) | curses.A_BOLD)
 
     curses.echo()
