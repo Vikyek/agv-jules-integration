@@ -114,7 +114,6 @@ def draw_menu(stdscr):
                 sessions_cache.sort(key=lambda x: x.get("updateTime") or x.get("createTime") or "")
             else:
                 sessions_cache = [s for s in raw_sessions if s.get("state") not in ("ARCHIVED", "CLOSED")]
-                sessions_cache.sort(key=lambda x: x.get("createTime") or "")
             
             # Preload full activities for all cached sessions
             for s in sessions_cache:
@@ -142,7 +141,7 @@ def draw_menu(stdscr):
         footer_height = len(footer_lines)
 
         # Draw session table with title wrapping
-        view_hdr = "ARCHIVED SESSION HISTORY (CHRONOLOGICAL):" if view_archived else "ACTIVE SESSIONS (CHRONOLOGICAL):"
+        view_hdr = "ARCHIVED SESSION HISTORY (CHRONOLOGICAL):" if view_archived else "ACTIVE SESSIONS:"
         stdscr.addstr(3, 1, view_hdr[:width-2], curses.A_BOLD)
         
         # Calculate available vertical space for sessions list
@@ -252,20 +251,26 @@ def draw_menu(stdscr):
         key = stdscr.getch()
 
         if key in (ord('q'), ord('Q')):
-            # On TUI exit: If system autostart is disabled, automatically close background service
-            if not auto_enabled:
-                subprocess.run(["systemctl", "--user", "stop", "jules-listener.service"], capture_output=True, text=True)
+            # Persistent session history retention: Do NOT kill background service or delete cache on TUI exit
             break
         elif key == curses.KEY_UP and selected_idx > 0:
             selected_idx -= 1
         elif key == curses.KEY_DOWN and selected_idx < len(sessions_cache) - 1:
             selected_idx += 1
         elif key in (ord('s'), ord('S')):
-            action_msg = toggle_systemd_service()
-            last_fetch = 0
+            action_name = "Stop background listener service?" if svc_active else "Start background listener service?"
+            if prompt_confirm(stdscr, action_name):
+                action_msg = toggle_systemd_service()
+                last_fetch = 0
+            else:
+                action_msg = "Cancelled service toggle."
         elif key in (ord('b'), ord('B')):
-            action_msg = toggle_systemd_autostart()
-            last_fetch = 0
+            action_name = "Disable system autostart?" if auto_enabled else "Enable system autostart?"
+            if prompt_confirm(stdscr, action_name):
+                action_msg = toggle_systemd_autostart()
+                last_fetch = 0
+            else:
+                action_msg = "Cancelled autostart toggle."
         elif key in (ord('h'), ord('H')):
             view_archived = not view_archived
             selected_idx = 0
@@ -282,11 +287,14 @@ def draw_menu(stdscr):
             save_config(cfg)
             action_msg = f"Listener mode updated to: {nxt.upper()}"
         elif not view_archived and key in (ord('a'), ord('A')) and sessions_cache:
-            curr_s = sessions_cache[selected_idx]
-            sid = curr_s.get("id") or curr_s.get("name", "").split("/")[-1]
-            archive_session(sid)
-            last_fetch = 0
-            action_msg = f"Archived session #{selected_idx + 1}"
+            if prompt_confirm(stdscr, f"Archive session #{selected_idx + 1}?"):
+                curr_s = sessions_cache[selected_idx]
+                sid = curr_s.get("id") or curr_s.get("name", "").split("/")[-1]
+                archive_session(sid)
+                last_fetch = 0
+                action_msg = f"Archived session #{selected_idx + 1}"
+            else:
+                action_msg = "Cancelled archiving session."
         elif view_archived and key in (ord('u'), ord('U')) and sessions_cache:
             from jules_manager import unarchive_session
             curr_s = sessions_cache[selected_idx]
@@ -310,15 +318,35 @@ def toggle_systemd_service():
         res = subprocess.run(["systemctl", "--user", "start", "jules-listener.service"], capture_output=True, text=True)
         return "🚀 Started background Jules listener service."
 
-def toggle_systemd_autostart():
-    check = subprocess.run(["systemctl", "--user", "is-enabled", "jules-listener.service"], capture_output=True, text=True)
-    is_enabled = "enabled" in check.stdout.strip()
-    if is_enabled:
-        res = subprocess.run(["systemctl", "--user", "disable", "jules-listener.service"], capture_output=True, text=True)
-        return "🔒 Disabled system autostart for Jules listener."
-    else:
-        res = subprocess.run(["systemctl", "--user", "enable", "jules-listener.service"], capture_output=True, text=True)
-        return "⚡ Enabled system autostart for Jules listener."
+def prompt_confirm(stdscr, question):
+    """Displays a full-screen confirmation modal prompt returning True if user presses 'y'/'Y'."""
+    stdscr.timeout(-1)
+    while True:
+        height, width = stdscr.getmaxyx()
+        stdscr.clear()
+
+        header = " ⚠️ CONFIRM ACTION "
+        stdscr.attron(curses.color_pair(4) | curses.A_BOLD)
+        stdscr.addstr(0, 0, header.center(width)[:width])
+        stdscr.attroff(curses.color_pair(4) | curses.A_BOLD)
+
+        stdscr.attron(curses.color_pair(3) | curses.A_BOLD)
+        stdscr.addstr(height // 2 - 1, 0, question.center(width)[:width])
+        stdscr.attroff(curses.color_pair(3) | curses.A_BOLD)
+
+        prompt_str = "Press [y] to Confirm | Press [n] or [ESC] to Cancel"
+        stdscr.attron(curses.color_pair(1))
+        stdscr.addstr(height // 2 + 1, 0, prompt_str.center(width)[:width])
+        stdscr.attroff(curses.color_pair(1))
+
+        stdscr.refresh()
+        ch = stdscr.getch()
+        if ch in (ord('y'), ord('Y')):
+            stdscr.timeout(1000)
+            return True
+        elif ch in (ord('n'), ord('N'), 27):
+            stdscr.timeout(1000)
+            return False
 
 # TODO: Future Reimplementation - Prompt user for Knowledge rule and update via jules_scraper
 # def prompt_knowledge_update(stdscr):
@@ -496,9 +524,13 @@ def prompt_reply(stdscr, session_id, local_num, preloaded_data=None):
             status_err = ""
             continue
         elif not reply_active and ch in (ord('a'), ord('A')):
-            archive_session(session_id)
-            stdscr.timeout(1000)
-            return f"Archived session #{local_num}"
+            if prompt_confirm(stdscr, f"Archive session #{local_num}?"):
+                archive_session(session_id)
+                stdscr.timeout(1000)
+                return f"Archived session #{local_num}"
+            else:
+                status_err = "Cancelled archiving session."
+                continue
         elif reply_active and ch in (curses.KEY_ENTER, 10, 13):
             if input_text.strip():
                 res = send_message(session_id, input_text.strip())
