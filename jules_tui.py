@@ -79,16 +79,24 @@ def draw_menu(stdscr):
         auto_enabled = "enabled" in auto_check.stdout.strip()
         auto_str = "ENABLED" if auto_enabled else "DISABLED"
 
-        # Header
-        header_str = " 🤖 GOOGLE JULES API MANAGER & LISTENER TUI "
+        # Header (Responsive)
+        if width < 80:
+            header_str = " 🤖 JULES MANAGER "
+        else:
+            header_str = " 🤖 GOOGLE JULES API MANAGER & LISTENER TUI "
+            
         stdscr.attron(curses.color_pair(5) | curses.A_BOLD)
-        stdscr.addstr(0, 0, header_str.center(width))
+        stdscr.addstr(0, 0, header_str[:width].center(width))
         stdscr.attroff(curses.color_pair(5) | curses.A_BOLD)
 
-        # Mode line
-        mode_str = f" Mode: [{cfg.get('mode', 'continuous').upper()}] | Service: [{svc_str}] | Autostart: [{auto_str}] | Refreshing sessions... "
+        # Mode line (Responsive)
+        if width < 80:
+            mode_str = f" Mode:[{cfg.get('mode', 'continuous')[:4].upper()}] Svc:[{svc_str}] Auto:[{auto_str[:3]}] "
+        else:
+            mode_str = f" Mode: [{cfg.get('mode', 'continuous').upper()}] | Service: [{svc_str}] | Autostart: [{auto_str}] "
+            
         stdscr.attron(curses.color_pair(1))
-        stdscr.addstr(1, 2, mode_str[:width-4])
+        stdscr.addstr(1, 1, mode_str[:width-2])
         stdscr.attroff(curses.color_pair(1))
 
         # Fetch sessions periodically or on start
@@ -99,11 +107,11 @@ def draw_menu(stdscr):
             last_fetch = now
 
         # Draw session table
-        stdscr.addstr(3, 2, "ACTIVE & HISTORICAL SESSIONS:", curses.A_BOLD)
+        stdscr.addstr(3, 1, "SESSIONS:", curses.A_BOLD)
         max_rows = min(height - 9, len(sessions_cache))
         
         if not sessions_cache:
-            stdscr.addstr(5, 4, "No active sessions found.", curses.color_pair(3))
+            stdscr.addstr(5, 2, "No active sessions found.", curses.color_pair(3))
         else:
             for i in range(max_rows):
                 s = sessions_cache[i]
@@ -123,19 +131,19 @@ def draw_menu(stdscr):
                 prefix = ">" if i == selected_idx else " "
 
                 # Responsive layout scaling based on terminal width
-                if width < 60:
-                    # Compact view for small windows
+                if width < 80:
+                    # Compact view for half-screen & tiled windows
                     short_state = state.replace("AWAITING_USER_FEEDBACK", "FEEDBACK").replace("IN_PROGRESS", "RUNNING")
                     line = f"{prefix} [{sid[:8]}] {short_state[:8]} | {title}"
-                elif width < 90:
+                elif width < 120:
                     # Medium view
                     short_state = state.replace("AWAITING_USER_FEEDBACK", "FEEDBACK")
                     line = f"{prefix} [{sid[:10]}] {short_state:<12} | {title}"
                 else:
-                    # Full wide view with tight padding
+                    # Full wide view
                     line = f"{prefix} [{sid[:12]}] {state:<23} | {title}"
 
-                display_line = line[:width - 3]
+                display_line = line[:width - 2]
 
                 if i == selected_idx:
                     stdscr.attron(curses.A_REVERSE)
@@ -149,13 +157,17 @@ def draw_menu(stdscr):
         # Action notification message line (rendered above keybinding tips)
         if action_msg:
             stdscr.attron(curses.color_pair(3) | curses.A_BOLD)
-            stdscr.addstr(height - 3, 2, action_msg[:width-4])
+            stdscr.addstr(height - 3, 1, action_msg[:width-2])
             stdscr.attroff(curses.color_pair(3) | curses.A_BOLD)
 
-        # Persistent Footer / Keybindings bar
-        key_tips = f"Keybindings: [s] {'stop' if svc_active else 'start'} service | [b] {'disable' if auto_enabled else 'enable'} autostart | [m] mode | [r] refresh | [a] archive | [q] quit"
+        # Persistent Footer / Keybindings bar (Responsive)
+        if width < 80:
+            key_tips = f"[s] {'stop' if svc_active else 'start'} | [b] autostart | [m] mode | [r] refresh | [a] archive | [q] quit"
+        else:
+            key_tips = f"Keybindings: [s] {'stop' if svc_active else 'start'} service | [b] {'disable' if auto_enabled else 'enable'} autostart | [m] mode | [r] refresh | [a] archive | [q] quit"
+            
         stdscr.attron(curses.color_pair(1))
-        stdscr.addstr(height - 2, 2, key_tips[:width-4])
+        stdscr.addstr(height - 2, 1, key_tips[:width-2])
         stdscr.attroff(curses.color_pair(1))
 
         stdscr.refresh()
