@@ -120,7 +120,7 @@ def draw_menu(stdscr):
             stdscr.attroff(curses.color_pair(3) | curses.A_BOLD)
 
         # Persistent Footer / Keybindings bar
-        key_tips = f"Keybindings: [s] {'stop' if svc_active else 'start'} service | [m] mode | [r] refresh | [k] add knowledge | [a] archive | [q] quit"
+        key_tips = f"Keybindings: [s] {'stop' if svc_active else 'start'} service | [m] mode | [r] refresh | [a] archive | [q] quit"
         stdscr.attron(curses.color_pair(1))
         stdscr.addstr(height - 2, 2, key_tips[:width-4])
         stdscr.attroff(curses.color_pair(1))
@@ -138,9 +138,10 @@ def draw_menu(stdscr):
         elif key in (ord('s'), ord('S')):
             action_msg = toggle_systemd_service()
             last_fetch = 0
-        elif key in (ord('k'), ord('K')):
-            action_msg = prompt_knowledge_update(stdscr)
-            last_fetch = 0
+        # TODO: Future Reimplementation - Add Knowledge option via jules_scraper
+        # elif key in (ord('k'), ord('K')):
+        #     action_msg = prompt_knowledge_update(stdscr)
+        #     last_fetch = 0
         elif key in (ord('r'), ord('R')):
             last_fetch = 0
             action_msg = "Refreshed session list & cookies."
@@ -164,7 +165,6 @@ def draw_menu(stdscr):
             last_fetch = 0
 
 def toggle_systemd_service():
-    import subprocess
     check = subprocess.run(["systemctl", "--user", "is-active", "jules-listener.service"], capture_output=True, text=True)
     is_active = check.stdout.strip() == "active"
     if is_active:
@@ -174,31 +174,32 @@ def toggle_systemd_service():
         res = subprocess.run(["systemctl", "--user", "start", "jules-listener.service"], capture_output=True, text=True)
         return "🚀 Started background Jules listener service."
 
-def prompt_knowledge_update(stdscr):
-    height, width = stdscr.getmaxyx()
-    curses.echo()
-    try:
-        curses.curs_set(1)
-    except Exception:
-        pass
-    stdscr.addstr(height - 3, 2, " " * (width - 4))
-    stdscr.addstr(height - 3, 2, "Add Jules Knowledge Rule (e.g. repo:rule): ", curses.color_pair(3) | curses.A_BOLD)
-    stdscr.refresh()
-    
-    msg_bytes = stdscr.getstr(height - 3, 44, width - 48)
-    curses.noecho()
-    try:
-        curses.curs_set(0)
-    except Exception:
-        pass
-    
-    text = msg_bytes.decode('utf-8').strip()
-    if text and ":" in text:
-        repo, rule = text.split(":", 1)
-        import subprocess
-        res = subprocess.run([sys.executable, os.path.join(os.path.dirname(__file__), "jules_scraper.py"), "update", "--repo", repo.strip(), "--setting", "knowledge", "--value", json.dumps({"rule": rule.strip()})], capture_output=True, text=True)
-        return "Updated Knowledge rule."
-    return "Cancelled Knowledge input (format repo:rule required)."
+# TODO: Future Reimplementation - Prompt user for Knowledge rule and update via jules_scraper
+# def prompt_knowledge_update(stdscr):
+#     height, width = stdscr.getmaxyx()
+#     curses.echo()
+#     try:
+#         curses.curs_set(1)
+#     except Exception:
+#         pass
+#     stdscr.addstr(height - 3, 2, " " * (width - 4))
+#     stdscr.addstr(height - 3, 2, "Add Jules Knowledge Rule (e.g. repo:rule): ", curses.color_pair(3) | curses.A_BOLD)
+#     stdscr.refresh()
+#     
+#     msg_bytes = stdscr.getstr(height - 3, 44, width - 48)
+#     curses.noecho()
+#     try:
+#         curses.curs_set(0)
+#     except Exception:
+#         pass
+#     
+#     text = msg_bytes.decode('utf-8').strip()
+#     if text and ":" in text:
+#         repo, rule = text.split(":", 1)
+#         import subprocess
+#         res = subprocess.run([sys.executable, os.path.join(os.path.dirname(__file__), "jules_scraper.py"), "update", "--repo", repo.strip(), "--setting", "knowledge", "--value", json.dumps({"rule": rule.strip()})], capture_output=True, text=True)
+#         return "Updated Knowledge rule."
+#     return "Cancelled Knowledge input (format repo:rule required)."
 
 def prompt_reply(stdscr, session_id):
     height, width = stdscr.getmaxyx()
