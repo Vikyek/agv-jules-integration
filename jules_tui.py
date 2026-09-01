@@ -56,12 +56,22 @@ def draw_menu(stdscr):
     selected_idx = 0
     sessions_cache = []
     last_fetch = 0
-    status_msg = "Press 'r' to refresh, 'a' to archive, 'm' to cycle mode, 'q' to quit."
+    import subprocess
+    svc_check = subprocess.run(["systemctl", "--user", "is-active", "jules-listener.service"], capture_output=True, text=True)
+    svc_active = svc_check.stdout.strip() == "active"
+    svc_str = "[ACTIVE]" if svc_active else "[STOPPED]"
+
+    status_msg = f"Press 's' to {('stop' if svc_active else 'start')} service, 'm' to cycle mode, 'r' to refresh, 'a' to archive, 'q' to quit."
     cfg = load_config()
 
     while True:
         stdscr.clear()
         height, width = stdscr.getmaxyx()
+
+        # Check service status live
+        svc_check = subprocess.run(["systemctl", "--user", "is-active", "jules-listener.service"], capture_output=True, text=True)
+        svc_active = svc_check.stdout.strip() == "active"
+        svc_str = "RUNNING" if svc_active else "STOPPED"
 
         # Header
         header_str = " 🤖 GOOGLE JULES API MANAGER & LISTENER TUI "
@@ -70,9 +80,9 @@ def draw_menu(stdscr):
         stdscr.attroff(curses.color_pair(5) | curses.A_BOLD)
 
         # Mode line
-        mode_str = f" Mode: [{cfg.get('mode', 'continuous').upper()}] | Refreshing sessions... "
+        mode_str = f" Mode: [{cfg.get('mode', 'continuous').upper()}] | Service: [{svc_str}] | Refreshing sessions... "
         stdscr.attron(curses.color_pair(1))
-        stdscr.addstr(1, 2, mode_str)
+        stdscr.addstr(1, 2, mode_str[:width-4])
         stdscr.attroff(curses.color_pair(1))
 
         # Fetch sessions periodically or on start
@@ -122,6 +132,9 @@ def draw_menu(stdscr):
             selected_idx -= 1
         elif key == curses.KEY_DOWN and selected_idx < len(sessions_cache) - 1:
             selected_idx += 1
+        elif key in (ord('s'), ord('S')):
+            status_msg = toggle_systemd_service()
+            last_fetch = 0
         elif key in (ord('k'), ord('K')):
             status_msg = prompt_knowledge_update(stdscr)
             last_fetch = 0
@@ -146,6 +159,17 @@ def draw_menu(stdscr):
             sid = curr_s.get("id") or curr_s.get("name", "").split("/")[-1]
             status_msg = prompt_reply(stdscr, sid)
             last_fetch = 0
+
+def toggle_systemd_service():
+    import subprocess
+    check = subprocess.run(["systemctl", "--user", "is-active", "jules-listener.service"], capture_output=True, text=True)
+    is_active = check.stdout.strip() == "active"
+    if is_active:
+        res = subprocess.run(["systemctl", "--user", "stop", "jules-listener.service"], capture_output=True, text=True)
+        return "🛑 Stopped background Jules listener service."
+    else:
+        res = subprocess.run(["systemctl", "--user", "start", "jules-listener.service"], capture_output=True, text=True)
+        return "🚀 Started background Jules listener service."
 
 def prompt_knowledge_update(stdscr):
     height, width = stdscr.getmaxyx()
