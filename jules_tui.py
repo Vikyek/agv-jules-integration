@@ -79,24 +79,20 @@ def draw_menu(stdscr):
         auto_enabled = "enabled" in auto_check.stdout.strip()
         auto_str = "ENABLED" if auto_enabled else "DISABLED"
 
-        # Header (Responsive)
-        if width < 80:
-            header_str = " 🤖 JULES MANAGER "
-        else:
-            header_str = " 🤖 GOOGLE JULES API MANAGER & LISTENER TUI "
-            
+        # Header (Centered)
+        header_str = " 🤖 JULES MANAGER " if width < 80 else " 🤖 GOOGLE JULES API MANAGER & LISTENER TUI "
         stdscr.attron(curses.color_pair(5) | curses.A_BOLD)
-        stdscr.addstr(0, 0, header_str[:width].center(width))
+        stdscr.addstr(0, 0, header_str.center(width)[:width])
         stdscr.attroff(curses.color_pair(5) | curses.A_BOLD)
 
-        # Mode line (Responsive)
+        # Mode line (Centered)
         if width < 80:
-            mode_str = f" Mode:[{cfg.get('mode', 'continuous')[:4].upper()}] Svc:[{svc_str}] Auto:[{auto_str[:3]}] "
+            mode_str = f"Mode:[{cfg.get('mode', 'continuous')[:4].upper()}] Svc:[{svc_str}] Auto:[{auto_str[:3]}]"
         else:
-            mode_str = f" Mode: [{cfg.get('mode', 'continuous').upper()}] | Service: [{svc_str}] | Autostart: [{auto_str}] "
+            mode_str = f"Mode: [{cfg.get('mode', 'continuous').upper()}] | Service: [{svc_str}] | Autostart: [{auto_str}]"
             
         stdscr.attron(curses.color_pair(1))
-        stdscr.addstr(1, 1, mode_str[:width-2])
+        stdscr.addstr(1, 0, mode_str.center(width)[:width])
         stdscr.attroff(curses.color_pair(1))
 
         # Fetch sessions periodically or on start
@@ -106,14 +102,29 @@ def draw_menu(stdscr):
             sessions_cache = res.get("sessions", []) if isinstance(res, dict) else []
             last_fetch = now
 
-        # Draw session table
+        # Multi-line footer keybindings bar wrapping calculation
+        if width < 80:
+            raw_tips = f"[s] {'stop' if svc_active else 'start'} | [b] autostart | [m] mode | [r] refresh | [a] archive | [q] quit"
+        else:
+            raw_tips = f"Keybindings: [s] {'stop' if svc_active else 'start'} service | [b] {'disable' if auto_enabled else 'enable'} autostart | [m] mode | [r] refresh | [a] archive | [q] quit"
+
+        footer_lines = textwrap.wrap(raw_tips, max(20, width - 4)) or [raw_tips]
+        footer_height = len(footer_lines)
+
+        # Draw session table with title wrapping
         stdscr.addstr(3, 1, "SESSIONS:", curses.A_BOLD)
-        max_rows = min(height - 9, len(sessions_cache))
         
+        # Calculate available vertical space for sessions list
+        available_height = height - 5 - footer_height - (1 if action_msg else 0)
+        curr_y = 5
+
         if not sessions_cache:
             stdscr.addstr(5, 2, "No active sessions found.", curses.color_pair(3))
         else:
-            for i in range(max_rows):
+            for i in range(len(sessions_cache)):
+                if curr_y >= 4 + available_height:
+                    break
+
                 s = sessions_cache[i]
                 sid = s.get("id") or s.get("name", "").split("/")[-1]
                 state = s.get("state", "UNKNOWN")
@@ -130,44 +141,60 @@ def draw_menu(stdscr):
 
                 prefix = ">" if i == selected_idx else " "
 
-                # Responsive layout scaling based on terminal width
                 if width < 80:
-                    # Compact view for half-screen & tiled windows
                     short_state = state.replace("AWAITING_USER_FEEDBACK", "FEEDBACK").replace("IN_PROGRESS", "RUNNING")
-                    line = f"{prefix} [{sid[:8]}] {short_state[:8]} | {title}"
+                    meta_prefix = f"{prefix} [{sid[:8]}] {short_state[:8]} | "
                 elif width < 120:
-                    # Medium view
                     short_state = state.replace("AWAITING_USER_FEEDBACK", "FEEDBACK")
-                    line = f"{prefix} [{sid[:10]}] {short_state:<12} | {title}"
+                    meta_prefix = f"{prefix} [{sid[:10]}] {short_state:<12} | "
                 else:
-                    # Full wide view
-                    line = f"{prefix} [{sid[:12]}] {state:<23} | {title}"
+                    meta_prefix = f"{prefix} [{sid[:12]}] {state:<23} | "
 
-                display_line = line[:width - 2]
+                meta_len = len(meta_prefix)
+                title_width = max(10, width - meta_len - 3)
+                wrapped_title = textwrap.wrap(title, title_width) or [title]
 
+                # Draw first line with metadata prefix
+                line1 = f"{meta_prefix}{wrapped_title[0]}"[:width-2]
                 if i == selected_idx:
                     stdscr.attron(curses.A_REVERSE)
-                    stdscr.addstr(5 + i, 1, display_line)
+                    stdscr.addstr(curr_y, 1, line1)
                     stdscr.attroff(curses.A_REVERSE)
                 else:
                     stdscr.attron(color)
-                    stdscr.addstr(5 + i, 1, display_line)
+                    stdscr.addstr(curr_y, 1, line1)
                     stdscr.attroff(color)
 
-        # Action notification message line (rendered above keybinding tips)
+                curr_y += 1
+
+                # Draw wrapped title lines indented under the title column
+                for extra_line in wrapped_title[1:]:
+                    if curr_y >= 4 + available_height:
+                        break
+                    indented_line = f"{' ' * meta_len}{extra_line}"[:width-2]
+                    if i == selected_idx:
+                        stdscr.attron(curses.A_REVERSE)
+                        stdscr.addstr(curr_y, 1, indented_line)
+                        stdscr.attroff(curses.A_REVERSE)
+                    else:
+                        stdscr.attron(color)
+                        stdscr.addstr(curr_y, 1, indented_line)
+                        stdscr.attroff(color)
+                    curr_y += 1
+
+        # Action notification message line
         if action_msg:
+            msg_y = height - 1 - footer_height
             stdscr.attron(curses.color_pair(3) | curses.A_BOLD)
-            stdscr.addstr(height - 3, 1, action_msg[:width-2])
+            stdscr.addstr(msg_y, 1, action_msg[:width-2])
             stdscr.attroff(curses.color_pair(3) | curses.A_BOLD)
 
-        # Persistent Footer / Keybindings bar (Responsive)
-        if width < 80:
-            key_tips = f"[s] {'stop' if svc_active else 'start'} | [b] autostart | [m] mode | [r] refresh | [a] archive | [q] quit"
-        else:
-            key_tips = f"Keybindings: [s] {'stop' if svc_active else 'start'} service | [b] {'disable' if auto_enabled else 'enable'} autostart | [m] mode | [r] refresh | [a] archive | [q] quit"
-            
-        stdscr.attron(curses.color_pair(1))
-        stdscr.addstr(height - 2, 1, key_tips[:width-2])
+        # Persistent Multi-Line Footer / Keybindings bar
+        for idx, f_line in enumerate(footer_lines):
+            f_y = height - footer_height + idx
+            stdscr.attron(curses.color_pair(1))
+            stdscr.addstr(f_y, 1, f_line[:width-2])
+            stdscr.attroff(curses.color_pair(1))
         stdscr.attroff(curses.color_pair(1))
 
         stdscr.refresh()
