@@ -126,11 +126,17 @@ def draw_menu(stdscr):
                     }
             last_fetch = now
 
-        # Multi-line footer keybindings bar wrapping calculation
-        if width < 80:
-            raw_tips = f"[s] {'stop' if svc_active else 'start'} | [b] auto | [h] {'active' if view_archived else 'history'} | [u] unarchive | [a] archive | [q] quit"
+        # Multi-line footer keybindings bar wrapping calculation (Context-aware)
+        if view_archived:
+            if width < 80:
+                raw_tips = f"[s] {'stop' if svc_active else 'start'} | [b] auto | [h] active | [u] unarchive | [q] quit"
+            else:
+                raw_tips = f"Keybindings: [s] {'stop' if svc_active else 'start'} service | [b] autostart | [h] view active | [u] unarchive | [q] quit"
         else:
-            raw_tips = f"Keybindings: [s] {'stop' if svc_active else 'start'} service | [b] autostart | [h] view {'active' if view_archived else 'history'} | [u] unarchive | [a] archive | [q] quit"
+            if width < 80:
+                raw_tips = f"[s] {'stop' if svc_active else 'start'} | [b] auto | [h] history | [a] archive | [q] quit"
+            else:
+                raw_tips = f"Keybindings: [s] {'stop' if svc_active else 'start'} service | [b] autostart | [h] view history | [a] archive | [q] quit"
 
         footer_lines = textwrap.wrap(raw_tips, max(20, width - 4)) or [raw_tips]
         footer_height = len(footer_lines)
@@ -275,13 +281,13 @@ def draw_menu(stdscr):
             cfg["mode"] = nxt
             save_config(cfg)
             action_msg = f"Listener mode updated to: {nxt.upper()}"
-        elif key in (ord('a'), ord('A')) and sessions_cache:
+        elif not view_archived and key in (ord('a'), ord('A')) and sessions_cache:
             curr_s = sessions_cache[selected_idx]
             sid = curr_s.get("id") or curr_s.get("name", "").split("/")[-1]
             archive_session(sid)
             last_fetch = 0
             action_msg = f"Archived session #{selected_idx + 1}"
-        elif key in (ord('u'), ord('U')) and sessions_cache:
+        elif view_archived and key in (ord('u'), ord('U')) and sessions_cache:
             from jules_manager import unarchive_session
             curr_s = sessions_cache[selected_idx]
             sid = curr_s.get("id") or curr_s.get("name", "").split("/")[-1]
