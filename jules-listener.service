@@ -1,0 +1,13 @@
+[Unit]
+Description=Google Jules API Listener & PR Handler Daemon
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/python3 %h/Projects/jules-integration/jules_listener.py --interval 60
+Restart=always
+RestartSec=30
+Environment="PYTHONUNBUFFERED=1"
+
+[Install]
+WantedBy=default.target

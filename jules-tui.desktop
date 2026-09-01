@@ -1,0 +1,9 @@
+[Desktop Entry]
+Name=Jules TUI
+Comment=Interactive Terminal UI for Google Jules API Sessions & Listener
+Exec=kitty -e python3 /home/v/Projects/jules-integration/jules_tui.py
+Icon=utilities-terminal
+Terminal=false
+Type=Application
+Categories=Development;Utility;
+Keywords=jules;ai;agent;tui;
