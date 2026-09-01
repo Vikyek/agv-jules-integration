@@ -479,7 +479,7 @@ def prompt_reply(stdscr, session_id, local_num, preloaded_data=None):
         else:
             prompt_y = max(6, height - 2)
             stdscr.attron(curses.color_pair(1) | curses.A_BOLD)
-            stdscr.addstr(prompt_y, 0, "Press [r] to type reply | Press [ESC] to return to session list".center(width)[:width])
+            stdscr.addstr(prompt_y, 0, "Press [r] to reply | Press [a] to archive | Press [ESC] to return".center(width)[:width])
             stdscr.attroff(curses.color_pair(1) | curses.A_BOLD)
 
         if status_err:
@@ -506,6 +506,10 @@ def prompt_reply(stdscr, session_id, local_num, preloaded_data=None):
             reply_active = True
             status_err = ""
             continue
+        elif not reply_active and ch in (ord('a'), ord('A')):
+            archive_session(session_id)
+            stdscr.timeout(1000)
+            return f"Archived session #{local_num}"
         elif reply_active and ch in (curses.KEY_ENTER, 10, 13):
             if input_text.strip():
                 res = send_message(session_id, input_text.strip())
