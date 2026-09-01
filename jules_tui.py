@@ -33,12 +33,25 @@ def draw_menu(stdscr):
         curses.curs_set(0)
     except Exception:
         pass
-    curses.use_default_colors()
-    curses.init_pair(1, curses.COLOR_CYAN, -1)
-    curses.init_pair(2, curses.COLOR_GREEN, -1)
-    curses.init_pair(3, curses.COLOR_YELLOW, -1)
-    curses.init_pair(4, curses.COLOR_RED, -1)
-    curses.init_pair(5, curses.COLOR_BLACK, curses.COLOR_CYAN)
+    try:
+        curses.use_default_colors()
+    except Exception:
+        pass
+    try:
+        curses.init_pair(1, curses.COLOR_CYAN, -1)
+        curses.init_pair(2, curses.COLOR_GREEN, -1)
+        curses.init_pair(3, curses.COLOR_YELLOW, -1)
+        curses.init_pair(4, curses.COLOR_RED, -1)
+        curses.init_pair(5, curses.COLOR_BLACK, curses.COLOR_CYAN)
+    except Exception:
+        try:
+            curses.init_pair(1, curses.COLOR_CYAN, curses.COLOR_BLACK)
+            curses.init_pair(2, curses.COLOR_GREEN, curses.COLOR_BLACK)
+            curses.init_pair(3, curses.COLOR_YELLOW, curses.COLOR_BLACK)
+            curses.init_pair(4, curses.COLOR_RED, curses.COLOR_BLACK)
+            curses.init_pair(5, curses.COLOR_BLACK, curses.COLOR_CYAN)
+        except Exception:
+            pass
 
     selected_idx = 0
     sessions_cache = []
