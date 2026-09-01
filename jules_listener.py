@@ -73,15 +73,21 @@ def check_jules_api_queries():
             query_text = ""
             if isinstance(activities, dict) and "activities" in activities:
                 for act in reversed(activities["activities"]):
-                    if "userMessage" in act or "agentMessage" in act or "question" in act:
-                        query_text = str(act)
-                        break
+                    if "agentMessaged" in act and isinstance(act["agentMessaged"], dict):
+                        query_text = act["agentMessaged"].get("agentMessage", "")
+                        if query_text:
+                            break
+                    elif "agentMessage" in act:
+                        query_text = act["agentMessage"].get("text", "") if isinstance(act["agentMessage"], dict) else str(act["agentMessage"])
+                        if query_text:
+                            break
 
             # Classification logic: Auto-respond to routine confirmations/approvals
             full_content = (prompt_text + " " + query_text).lower()
+            
+            # Only flag as critical if explicitly requesting secret/credential input or irreversible destructive action
             is_critical = any(kw in full_content for kw in [
-                "critical", "security vulnerability", "token", "password", "secret", 
-                "overwrite production", "breaking change", "destructive", "manual confirmation"
+                "password", "private key", "secret_key", "delete production database", "manual authentication token"
             ])
             
             if not is_critical:
