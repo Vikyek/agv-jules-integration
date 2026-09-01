@@ -114,6 +114,7 @@ def draw_menu(stdscr):
                 sessions_cache.sort(key=lambda x: x.get("updateTime") or x.get("createTime") or "")
             else:
                 sessions_cache = [s for s in raw_sessions if s.get("state") not in ("ARCHIVED", "CLOSED")]
+                sessions_cache.sort(key=lambda x: x.get("createTime") or "")
             
             # Preload full activities for all cached sessions
             for s in sessions_cache:
