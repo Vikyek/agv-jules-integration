@@ -226,63 +226,97 @@ def toggle_systemd_autostart():
 def prompt_reply(stdscr, session_id):
     height, width = stdscr.getmaxyx()
     activities = get_session_activities(session_id)
+    sess = _make_request(f"sessions/{session_id}") if '_make_request' in globals() else {}
     
-    # Extract question text from planGenerated steps, agent messages, or user messages
-    q_text = ""
+    # Extract complete question text & step details
+    q_lines = []
+    title_str = sess.get("title") or f"Session {session_id[:12]}"
+    if title_str:
+        q_lines.append(f"Title: {title_str}")
+        
+    prompt_raw = sess.get("prompt", "")
+    if prompt_raw:
+        q_lines.append("--- Original Task Prompt ---")
+        q_lines.extend(prompt_raw.splitlines()[:8])
+
     if isinstance(activities, dict) and "activities" in activities:
         for act in reversed(activities["activities"]):
             if "planGenerated" in act and "plan" in act["planGenerated"]:
+                q_lines.append("--- Generated Implementation Plan ---")
                 steps = act["planGenerated"]["plan"].get("steps", [])
-                if steps:
-                    step_titles = [f"Step {idx+1}: {s.get('title', '')}" for idx, s in enumerate(steps)]
-                    q_text = " | ".join(step_titles)
-                    break
+                for idx, s in enumerate(steps):
+                    q_lines.append(f" Step {idx+1}: {s.get('title', '')}")
+                    desc = s.get('description', '')
+                    if desc:
+                        q_lines.append(f"   {desc[:width-10]}")
+                break
             elif "userMessage" in act:
-                q_text = act["userMessage"].get("text", "")
+                q_lines.append("--- Message ---")
+                q_lines.extend(act["userMessage"].get("text", "").splitlines()[:6])
                 break
             elif "agentMessage" in act:
-                q_text = act["agentMessage"].get("text", "")
+                q_lines.append("--- Agent Message ---")
+                q_lines.extend(act["agentMessage"].get("text", "").splitlines()[:6])
                 break
-                
-    if not q_text:
-        # Fallback to session title or active state prompt
-        sess = _make_request(f"sessions/{session_id}") if '_make_request' in globals() else {}
-        q_text = sess.get("title") or "Awaiting user feedback / approval for plan implementation."
 
-    # Clear modal area
-    stdscr.addstr(height - 5, 2, " " * (width - 4))
-    stdscr.addstr(height - 4, 2, " " * (width - 4))
-    stdscr.addstr(height - 3, 2, " " * (width - 4))
+    # Full screen modal loop (blocking, no timeout)
+    stdscr.timeout(-1)
+    input_text = ""
+    status_err = ""
 
-    # Display Jules Question
-    stdscr.attron(curses.color_pair(3) | curses.A_BOLD)
-    stdscr.addstr(height - 5, 2, f"❓ Jules Question: {q_text[:width - 22]}")
-    stdscr.attroff(curses.color_pair(3) | curses.A_BOLD)
-
-    curses.echo()
-    try:
-        curses.curs_set(1)
-    except Exception:
-        pass
+    while True:
+        stdscr.clear()
         
-    prompt_str = f"Enter response for [{session_id[:12]}]: "
-    stdscr.addstr(height - 3, 2, prompt_str, curses.color_pair(1) | curses.A_BOLD)
-    stdscr.refresh()
-    
-    msg_bytes = stdscr.getstr(height - 3, 2 + len(prompt_str), width - len(prompt_str) - 4)
-    curses.noecho()
-    try:
-        curses.curs_set(0)
-    except Exception:
-        pass
-    
-    text = msg_bytes.decode('utf-8').strip()
-    if text:
-        res = send_message(session_id, text)
-        if "error" not in res:
-            return f"Sent response to session {session_id[:12]}"
-        return f"Error sending message: {res.get('error')}"
-    return "Cancelled prompt input."
+        # Modal Header
+        header = f" ❓ JULES QUERY RESOLUTION PANEL [{session_id[:12]}] "
+        stdscr.attron(curses.color_pair(5) | curses.A_BOLD)
+        stdscr.addstr(0, 0, header.center(width))
+        stdscr.attroff(curses.color_pair(5) | curses.A_BOLD)
+
+        # Draw full query content box
+        stdscr.attron(curses.color_pair(3))
+        stdscr.addstr(2, 2, "QUERY DETAILS & PLAN:", curses.A_BOLD)
+        stdscr.attroff(curses.color_pair(3))
+
+        max_display = min(height - 8, len(q_lines))
+        for i in range(max_display):
+            line_str = q_lines[i][:width-4]
+            stdscr.addstr(4 + i, 4, line_str)
+
+        # Input Prompt area at bottom
+        prompt_y = height - 4
+        stdscr.attron(curses.color_pair(1) | curses.A_BOLD)
+        stdscr.addstr(prompt_y, 2, f"Your Reply (Press ENTER to send, ESC to cancel):")
+        stdscr.attroff(curses.color_pair(1) | curses.A_BOLD)
+
+        stdscr.attron(curses.A_REVERSE)
+        stdscr.addstr(prompt_y + 1, 2, f"> {input_text:<{width-6}}")
+        stdscr.attroff(curses.A_REVERSE)
+
+        if status_err:
+            stdscr.attron(curses.color_pair(4))
+            stdscr.addstr(height - 1, 2, status_err[:width-4])
+            stdscr.attroff(curses.color_pair(4))
+
+        stdscr.refresh()
+        ch = stdscr.getch()
+
+        if ch == 27:  # ESC key
+            stdscr.timeout(1000)
+            return "Cancelled query resolution modal."
+        elif ch in (curses.KEY_ENTER, 10, 13):
+            if input_text.strip():
+                res = send_message(session_id, input_text.strip())
+                stdscr.timeout(1000)
+                if "error" not in res:
+                    return f"Sent response to session {session_id[:12]}"
+                return f"Error sending message: {res.get('error')}"
+            else:
+                status_err = "Please enter a non-empty response or press ESC to cancel."
+        elif ch in (curses.KEY_BACKSPACE, 127, 8):
+            input_text = input_text[:-1]
+        elif 32 <= ch <= 126:
+            input_text += chr(ch)
 
 def main():
     try:
