@@ -37,20 +37,44 @@ def load_config_mode():
     return "continuous"
 
 def auto_archive_completed_sessions():
-    """Archives sessions whose tasks are completed, merged, or terminal."""
+    """Archives sessions whose tasks are completed, merged, terminal, or duplicates."""
     res = list_sessions()
     if not res or "error" in res or "sessions" not in res:
         return 0
 
+    import re
     archived_count = 0
+    seen_topics = {}
+
     for session in res.get("sessions", []):
         session_id = session.get("name", "").split("/")[-1]
         state = session.get("state", "")
+        
+        # 1. Archive terminal / completed states
         if state in ("COMPLETED", "SUCCEEDED", "RESOLVED", "MERGED", "CLOSED"):
             arc_res = archive_session(session_id)
             if arc_res and "error" not in arc_res:
                 archived_count += 1
                 print(f"📦 [Jules Listener] Auto-archived session {session_id} [{state}]")
+                continue
+
+        # 2. Archive duplicate sessions with identical topic / task
+        raw_title = session.get("title", "")
+        if not raw_title:
+            p_lines = [l.strip() for l in session.get("prompt", "").splitlines() if l.strip()]
+            raw_title = p_lines[0] if p_lines else "Untitled"
+
+        topic_key = re.sub(r"^[#🔒⚡\s]+", "", raw_title).strip().lower()
+        topic_key = re.sub(r"\s+", " ", topic_key)
+
+        if topic_key in seen_topics:
+            arc_res = archive_session(session_id)
+            if arc_res and "error" not in arc_res:
+                archived_count += 1
+                print(f"📦 [Jules Listener] Auto-archived duplicate session {session_id} (original: {seen_topics[topic_key]})")
+        else:
+            seen_topics[topic_key] = session_id
+
     return archived_count
 
 def check_jules_api_queries():

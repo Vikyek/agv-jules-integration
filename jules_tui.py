@@ -128,7 +128,13 @@ def draw_menu(stdscr):
                 s = sessions_cache[i]
                 local_num = i + 1
                 state = s.get("state", "UNKNOWN")
-                title = s.get("title") or s.get("prompt", "").replace("\n", " ")
+                raw_title = s.get("title", "")
+                if not raw_title:
+                    prompt_lines = [l.strip() for l in s.get("prompt", "").splitlines() if l.strip()]
+                    raw_title = prompt_lines[0] if prompt_lines else "Untitled Session"
+                    # Remove markdown headers like # or 🔒
+                    raw_title = raw_title.lstrip("#").strip()
+                title = raw_title.replace("\n", " ")
 
                 if "COMPLETED" in state or "SUCCEEDED" in state or "RESOLVED" in state:
                     color = curses.color_pair(2)
