@@ -340,7 +340,7 @@ def prompt_confirm(stdscr, question):
             return False
 
 def prompt_action_history_panel(stdscr):
-    """Displays a dedicated full-screen Global Action History Log panel (Query answers, PR actions, Sourcery suggestions, Merges, Branch deletions, Session archiving events)."""
+    """Displays a dedicated full-screen Global Action History Log panel specifying Title, Repo, Branch, and Action Type."""
     stdscr.timeout(-1)
     while True:
         height, width = stdscr.getmaxyx()
@@ -371,6 +371,10 @@ def prompt_action_history_panel(stdscr):
                                 "timestamp": ev.get("timestamp", ""),
                                 "action": ev.get("action", "EVENT"),
                                 "message": ev.get("message", ""),
+                                "title": ev.get("title", ""),
+                                "repo": ev.get("repo", ""),
+                                "branch": ev.get("branch", ""),
+                                "action_by": ev.get("action_by", "manual"),
                                 "query": ev.get("query", "")
                             })
         except Exception:
@@ -379,7 +383,7 @@ def prompt_action_history_panel(stdscr):
         log_entries.sort(key=lambda x: x.get("timestamp", ""), reverse=True)
 
         stdscr.attron(curses.color_pair(3) | curses.A_BOLD)
-        stdscr.addstr(2, 2, "RECORDED ACTIONS (QUERY REPLIES, PR ACTIONS, MERGES, ARCHIVE EVENTS):")
+        stdscr.addstr(2, 2, "RECORDED ACTIONS (TITLE, REPO, BRANCH & ACTION METADATA):")
         stdscr.attroff(curses.color_pair(3) | curses.A_BOLD)
 
         max_line_width = max(20, width - 6)
@@ -393,7 +397,18 @@ def prompt_action_history_panel(stdscr):
                 act = item["action"]
                 msg = item["message"]
                 sid = item["session_id"][:12]
-                formatted_lines.extend(textwrap.wrap(f"[{ts}] [{act}] (Session {sid}): {msg}", max_line_width))
+                title = item.get("title") or f"Session {sid}"
+                repo = item.get("repo") or "repository"
+                branch = item.get("branch") or "branch"
+                by_tag = item.get("action_by", "manual").upper()
+
+                header_line = f"[{ts}] [{act}] [{by_tag}] Task: '{title}'"
+                repo_line = f"   ↳ Repo: {repo} | Branch: {branch} | ID: {sid}"
+                msg_line = f"   ↳ Detail: {msg}"
+
+                formatted_lines.extend(textwrap.wrap(header_line, max_line_width))
+                formatted_lines.extend(textwrap.wrap(repo_line, max_line_width))
+                formatted_lines.extend(textwrap.wrap(msg_line, max_line_width))
                 if item.get("query"):
                     formatted_lines.extend(textwrap.wrap(f"   ↳ Query context: {item['query'][:120]}", max_line_width))
                 formatted_lines.append("")
@@ -411,10 +426,24 @@ def prompt_action_history_panel(stdscr):
             return "Returned to active sessions."
 
 def prompt_archived_panel(stdscr):
-    """Displays a dedicated full-screen Archived Sessions Collection panel (stored archived session objects)."""
+    """Displays a dedicated full-screen Archived Sessions Collection panel (stored archived session objects with auto vs manual tags)."""
     stdscr.timeout(-1)
     selected_idx = 0
     status_msg = ""
+
+    # Load persistent action log to check manual vs auto archiving tags
+    auto_archived_ids = set()
+    try:
+        log_file = os.path.expanduser("~/.config/jules/agy_actions.json")
+        if os.path.exists(log_file):
+            with open(log_file, "r") as f:
+                all_actions = json.load(f)
+                for sid, events in all_actions.items():
+                    for ev in events:
+                        if ev.get("action") == "ARCHIVE_SESSION" and ev.get("action_by") == "auto":
+                            auto_archived_ids.add(sid)
+    except Exception:
+        pass
 
     while True:
         height, width = stdscr.getmaxyx()
@@ -456,8 +485,11 @@ def prompt_archived_panel(stdscr):
                     break
 
                 s = archived_sessions[i]
+                sid = s.get("id") or s.get("name", "").split("/")[-1]
                 local_num = i + 1
                 state = s.get("state", "ARCHIVED")
+                arch_tag = "AUTO" if sid in auto_archived_ids else "MANUAL"
+                
                 raw_title = s.get("title", "")
                 if not raw_title or len(raw_title) > 100 or "\n" in raw_title:
                     title_lines = [l.strip() for l in (raw_title or s.get("prompt", "")).splitlines() if l.strip()]
@@ -465,7 +497,7 @@ def prompt_archived_panel(stdscr):
                 clean_title = raw_title.lstrip("#").strip().replace("\n", " ")
 
                 prefix = ">" if i == selected_idx else " "
-                meta_prefix = f"{prefix} [#{local_num:<2}] {state:<15} | "
+                meta_prefix = f"{prefix} [#{local_num:<2}] [{arch_tag:<6}] {state:<12} | "
                 meta_len = len(meta_prefix)
                 title_width = max(10, width - meta_len - 3)
                 wrapped_title = textwrap.wrap(clean_title, title_width) or [clean_title]

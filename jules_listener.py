@@ -50,9 +50,15 @@ def auto_archive_completed_sessions():
         session_id = session.get("name", "").split("/")[-1]
         state = session.get("state", "")
         
+        prompt_txt = session.get("prompt", "") or session.get("title", "")
+        clean_t = prompt_txt.splitlines()[0][:80] if prompt_txt else "Session"
+        src_ctx = session.get("sourceContext", {})
+        rep_name = src_ctx.get("source", "").replace("sources/github/", "").replace("sources/", "")
+        br_name = src_ctx.get("githubRepoContext", {}).get("startingBranch", "main")
+
         # 1. Archive terminal / completed states
         if state in ("COMPLETED", "SUCCEEDED", "RESOLVED", "MERGED", "CLOSED"):
-            arc_res = archive_session(session_id)
+            arc_res = archive_session(session_id, action_by="auto", title=clean_t, repo=rep_name, branch=br_name)
             if arc_res and "error" not in arc_res:
                 archived_count += 1
                 print(f"📦 [Jules Listener] Auto-archived session {session_id} [{state}]")
@@ -68,7 +74,7 @@ def auto_archive_completed_sessions():
         topic_key = re.sub(r"\s+", " ", topic_key)
 
         if topic_key in seen_topics:
-            arc_res = archive_session(session_id)
+            arc_res = archive_session(session_id, action_by="auto", title=clean_t, repo=rep_name, branch=br_name)
             if arc_res and "error" not in arc_res:
                 archived_count += 1
                 print(f"📦 [Jules Listener] Auto-archived duplicate session {session_id} (original: {seen_topics[topic_key]})")
@@ -120,27 +126,13 @@ def check_jules_api_queries():
                 send_res = send_message(session_id, auto_reply)
                 if "error" not in send_res:
                     print(f"⚡ [Jules Listener] Auto-handled session {session_id} query: '{auto_reply}'")
-                    # Log AGY processing action for TUI inspection
-                    try:
-                        log_file = os.path.expanduser("~/.config/jules/agy_actions.json")
-                        os.makedirs(os.path.dirname(log_file), exist_ok=True)
-                        actions = {}
-                        if os.path.exists(log_file):
-                            with open(log_file, "r") as f:
-                                actions = json.load(f)
-                        if session_id not in actions:
-                            actions[session_id] = []
-                        import time
-                        actions[session_id].append({
-                            "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
-                            "action": "AUTO_REPLY",
-                            "message": auto_reply,
-                            "query": query_text[:200]
-                        })
-                        with open(log_file, "w") as f:
-                            json.dump(actions, f, indent=2)
-                    except Exception:
-                        pass
+                    from jules_manager import log_action
+                    prompt_txt = session.get("prompt", "")
+                    clean_t = prompt_txt.splitlines()[0][:80] if prompt_txt else "Session"
+                    src_ctx = session.get("sourceContext", {})
+                    rep_name = src_ctx.get("source", "").replace("sources/github/", "").replace("sources/", "")
+                    br_name = src_ctx.get("githubRepoContext", {}).get("startingBranch", "main")
+                    log_action(session_id, "AUTO_REPLY", auto_reply, title=clean_t, repo=rep_name, branch=br_name, action_by="auto", query=query_text[:200])
                     continue
 
             # Flag critical query for explicit user attention
@@ -221,6 +213,10 @@ def check_and_handle_jules_prs(repo_path):
                 merge_cmd = ["gh", "pr", "merge", str(number), "--merge"]
                 m_res = subprocess.run(merge_cmd, cwd=repo_path, capture_output=True, text=True)
                 merged = m_res.returncode == 0
+                if merged:
+                    from jules_manager import log_action
+                    r_name = os.path.basename(repo_path)
+                    log_action(f"pr-{number}", "MERGE_PR", f"Merged PR #{number} into {r_name}:{branch}", title=title, repo=r_name, branch=branch, action_by="auto")
             else:
                 merged = False
                 if has_review_issues:

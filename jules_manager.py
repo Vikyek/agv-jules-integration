@@ -102,13 +102,58 @@ def send_message(session_id, message_text):
     payload = {"prompt": message_text}
     return _make_request(f"sessions/{session_id}:sendMessage", method="POST", payload=payload)
 
-def archive_session(session_id):
-    """Archives a completed or handled session."""
-    return _make_request(f"sessions/{session_id}:archive", method="POST")
+def log_action(session_id, action_type, message, title="", repo="", branch="", action_by="manual", query=""):
+    """Persistently records an action event (query reply, PR merge, branch deletion, archive event) with title, repo, branch metadata."""
+    try:
+        log_file = os.path.expanduser("~/.config/jules/agy_actions.json")
+        os.makedirs(os.path.dirname(log_file), exist_ok=True)
+        actions = {}
+        if os.path.exists(log_file):
+            with open(log_file, "r") as f:
+                actions = json.load(f)
+        if session_id not in actions:
+            actions[session_id] = []
+        
+        # If title/repo/branch not passed, attempt fetching session info
+        if not (title and repo and branch):
+            sess_info = _make_request(f"sessions/{session_id}")
+            if isinstance(sess_info, dict):
+                if not title:
+                    raw_title = sess_info.get("title") or sess_info.get("prompt", "")
+                    title = raw_title.splitlines()[0][:80] if raw_title else "Session"
+                src_ctx = sess_info.get("sourceContext", {})
+                if not repo:
+                    repo = src_ctx.get("source", "").replace("sources/github/", "").replace("sources/", "")
+                if not branch:
+                    branch = src_ctx.get("githubRepoContext", {}).get("startingBranch", "main")
 
-def unarchive_session(session_id):
-    """Unarchives an archived session."""
-    return _make_request(f"sessions/{session_id}:unarchive", method="POST")
+        import time
+        actions[session_id].append({
+            "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
+            "action": action_type,
+            "message": message,
+            "title": title,
+            "repo": repo,
+            "branch": branch,
+            "action_by": action_by,
+            "query": query[:200] if query else ""
+        })
+        with open(log_file, "w") as f:
+            json.dump(actions, f, indent=2)
+    except Exception:
+        pass
+
+def archive_session(session_id, action_by="manual", title="", repo="", branch=""):
+    """Archives a completed or handled session and logs the archive event with metadata."""
+    res = _make_request(f"sessions/{session_id}:archive", method="POST")
+    log_action(session_id, "ARCHIVE_SESSION", f"Session archived ({action_by})", title=title, repo=repo, branch=branch, action_by=action_by)
+    return res
+
+def unarchive_session(session_id, action_by="manual", title="", repo="", branch=""):
+    """Unarchives an archived session and logs the unarchive event with metadata."""
+    res = _make_request(f"sessions/{session_id}:unarchive", method="POST")
+    log_action(session_id, "UNARCHIVE_SESSION", f"Session unarchived ({action_by})", title=title, repo=repo, branch=branch, action_by=action_by)
+    return res
 
 def main():
     parser = argparse.ArgumentParser(description="Google Jules API Manager")
