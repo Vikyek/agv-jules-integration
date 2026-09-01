@@ -267,9 +267,8 @@ def prompt_reply(stdscr, session_id):
                 q_lines.extend(textwrap.wrap(pl, max_line_width) or [""])
 
         if isinstance(activities, dict) and "activities" in activities:
-            # Extract last ending agent message / question first, falling back to progressUpdated
+            # Extract last ending agent message / question first
             last_msg = ""
-            # Priority 1: Check for explicit agentMessaged or agentMessage
             for act in reversed(activities["activities"]):
                 if "agentMessaged" in act and isinstance(act["agentMessaged"], dict):
                     msg_text = act["agentMessaged"].get("agentMessage", "").strip()
@@ -282,7 +281,6 @@ def prompt_reply(stdscr, session_id):
                         last_msg = msg_text.strip()
                         break
 
-            # Priority 2: If no direct agent message found, check progressUpdated description
             if not last_msg:
                 for act in reversed(activities["activities"]):
                     if "progressUpdated" in act and isinstance(act["progressUpdated"], dict):
@@ -292,7 +290,6 @@ def prompt_reply(stdscr, session_id):
                             last_msg = f"[{title}]\n{desc}" if title else desc
                             break
 
-            # Priority 3: Check plan steps or user message
             if not last_msg:
                 for act in reversed(activities["activities"]):
                     if "userMessaged" in act and isinstance(act["userMessaged"], dict):
@@ -306,9 +303,14 @@ def prompt_reply(stdscr, session_id):
                         break
 
             if last_msg:
-                q_lines.append("--- Latest Jules Agent Question / Message ---")
+                q_lines.append("")
+                q_lines.append("=== LATEST JULES AGENT QUESTION / MESSAGE ===")
                 for l in last_msg.splitlines():
-                    q_lines.extend(textwrap.wrap(l, max_line_width) or [""])
+                    wrapped_sub = textwrap.wrap(l, max_line_width)
+                    if wrapped_sub:
+                        q_lines.extend(wrapped_sub)
+                    else:
+                        q_lines.append("")
 
         # Modal Header
         header = f" ❓ JULES QUERY RESOLUTION PANEL [{session_id[:12]}] "
@@ -321,10 +323,17 @@ def prompt_reply(stdscr, session_id):
         stdscr.addstr(2, 2, "QUERY DETAILS & LATEST JULES QUESTION:", curses.A_BOLD)
         stdscr.attroff(curses.color_pair(3))
 
-        max_display = min(height - 8, len(q_lines))
-        for i in range(max_display):
-            line_str = q_lines[i][:width-4]
-            stdscr.addstr(4 + i, 4, line_str)
+        # Calculate max lines that fit above input prompt
+        max_lines_allowed = max(3, height - 8)
+        
+        # Display the bottom-most lines of q_lines if content exceeds available height
+        if len(q_lines) > max_lines_allowed:
+            display_lines = q_lines[-max_lines_allowed:]
+        else:
+            display_lines = q_lines
+
+        for i, line_str in enumerate(display_lines):
+            stdscr.addstr(4 + i, 4, line_str[:width-5])
 
         # Input Prompt area at bottom
         prompt_y = max(6, height - 4)
