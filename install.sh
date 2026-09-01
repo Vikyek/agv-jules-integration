@@ -15,12 +15,14 @@ PLUGIN_DIR="$HOME/.gemini/config/plugins/jules-plugin"
 echo "🚀 [jules-integration] Installing executable CLI wrappers..."
 mkdir -p "$BIN_DIR" "$DESKTOP_DIR" "$SYSTEMD_USER_DIR" "$PLUGIN_DIR/skills/jules" "$PLUGIN_DIR/rules"
 
-chmod +x "$SCRIPT_DIR/jules_manager.py" "$SCRIPT_DIR/jules_listener.py" "$SCRIPT_DIR/jules_tui.py" "$SCRIPT_DIR/jules_hud.py"
+chmod +x "$SCRIPT_DIR/jules_manager.py" "$SCRIPT_DIR/jules_listener.py" "$SCRIPT_DIR/jules_tui.py" "$SCRIPT_DIR/jules_hud.py" "$SCRIPT_DIR/jules_scraper.py" "$SCRIPT_DIR/jules_cookie_extractor.py"
 
 ln -sf "$SCRIPT_DIR/jules_manager.py" "$BIN_DIR/jules-manager"
 ln -sf "$SCRIPT_DIR/jules_listener.py" "$BIN_DIR/jules-listener"
 ln -sf "$SCRIPT_DIR/jules_tui.py" "$BIN_DIR/jules-tui"
 ln -sf "$SCRIPT_DIR/jules_hud.py" "$BIN_DIR/jules-hud"
+ln -sf "$SCRIPT_DIR/jules_scraper.py" "$BIN_DIR/jules-scraper"
+ln -sf "$SCRIPT_DIR/jules_cookie_extractor.py" "$BIN_DIR/jules-cookie-extractor"
 
 echo "🖥️ [jules-integration] Installing desktop entry..."
 cp "$SCRIPT_DIR/jules-tui.desktop" "$DESKTOP_DIR/jules-tui.desktop"

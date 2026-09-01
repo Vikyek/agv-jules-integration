@@ -106,9 +106,12 @@ def draw_menu(stdscr):
             selected_idx -= 1
         elif key == curses.KEY_DOWN and selected_idx < len(sessions_cache) - 1:
             selected_idx += 1
+        elif key in (ord('k'), ord('K')):
+            status_msg = prompt_knowledge_update(stdscr)
+            last_fetch = 0
         elif key in (ord('r'), ord('R')):
             last_fetch = 0
-            status_msg = "Refreshed session list."
+            status_msg = "Refreshed session list & cookies."
         elif key in (ord('m'), ord('M')):
             modes = ["continuous", "once", "paused"]
             curr = cfg.get("mode", "continuous")
@@ -127,6 +130,26 @@ def draw_menu(stdscr):
             sid = curr_s.get("id") or curr_s.get("name", "").split("/")[-1]
             status_msg = prompt_reply(stdscr, sid)
             last_fetch = 0
+
+def prompt_knowledge_update(stdscr):
+    height, width = stdscr.getmaxyx()
+    curses.echo()
+    curses.curs_set(1)
+    stdscr.addstr(height - 3, 2, " " * (width - 4))
+    stdscr.addstr(height - 3, 2, "Add Jules Knowledge Rule (e.g. repo:rule): ", curses.color_pair(3) | curses.A_BOLD)
+    stdscr.refresh()
+    
+    msg_bytes = stdscr.getstr(height - 3, 44, width - 48)
+    curses.noecho()
+    curses.curs_set(0)
+    
+    text = msg_bytes.decode('utf-8').strip()
+    if text and ":" in text:
+        repo, rule = text.split(":", 1)
+        import subprocess
+        res = subprocess.run([sys.executable, os.path.join(os.path.dirname(__file__), "jules_scraper.py"), "update", "--repo", repo.strip(), "--setting", "knowledge", "--value", json.dumps({"rule": rule.strip()})], capture_output=True, text=True)
+        return "Updated Knowledge rule."
+    return "Cancelled Knowledge input (format repo:rule required)."
 
 def prompt_reply(stdscr, session_id):
     height, width = stdscr.getmaxyx()
