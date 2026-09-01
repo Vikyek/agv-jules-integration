@@ -1,9 +1,9 @@
 [Desktop Entry]
 Name=Jules TUI
 Comment=Interactive Terminal UI for Google Jules API Sessions & Listener
-Exec=kitty --title "Jules TUI" -e /home/v/.local/bin/jules-tui
+Exec=/usr/sbin/kitty --title "Jules TUI" -e /home/v/.local/bin/jules-tui
 Icon=utilities-terminal
-Terminal=true
+Terminal=false
 Type=Application
 Categories=Development;Utility;
 Keywords=jules;ai;agent;tui;
