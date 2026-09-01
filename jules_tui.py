@@ -109,11 +109,12 @@ def draw_menu(stdscr):
                 s = sessions_cache[i]
                 sid = s.get("id") or s.get("name", "").split("/")[-1]
                 state = s.get("state", "UNKNOWN")
-                prompt = s.get("prompt", "").replace("\n", " ")[:width - 45]
+                title = s.get("title") or s.get("prompt", "").replace("\n", " ")
+                display_title = title[:width - 45]
 
                 color = curses.color_pair(2) if "COMPLETED" in state or "SUCCEEDED" in state else (curses.color_pair(3) if "FEEDBACK" in state or "INPUT" in state else curses.color_pair(1))
                 
-                line = f"{' >' if i == selected_idx else '  '} [{sid[:12]}] {state:<22} | {prompt}"
+                line = f"{' >' if i == selected_idx else '  '} [{sid[:12]}] {state:<22} | {display_title}"
                 if i == selected_idx:
                     stdscr.attron(curses.A_REVERSE)
                     stdscr.addstr(5 + i, 2, line[:width-4])
