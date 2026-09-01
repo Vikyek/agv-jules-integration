@@ -71,8 +71,8 @@ def list_sources():
     return _make_request("sources")
 
 def list_sessions(include_archived=False):
-    """Lists active and historical coding sessions."""
-    endpoint = "sessions?includeArchived=true" if include_archived else "sessions"
+    """Lists active and historical coding sessions from Google Jules API."""
+    endpoint = "sessions?pageSize=500&filter=archived=true" if include_archived else "sessions?pageSize=500"
     return _make_request(endpoint)
 
 def create_session(prompt, source_name, branch="main"):
