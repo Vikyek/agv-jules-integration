@@ -256,18 +256,34 @@ def prompt_reply(stdscr, session_id):
             # Extract last ending agent progress message / question / evaluation
             last_msg = ""
             for act in reversed(activities["activities"]):
-                if "progressUpdated" in act and isinstance(act["progressUpdated"], dict):
+                if "agentMessaged" in act and isinstance(act["agentMessaged"], dict):
+                    last_msg = act["agentMessaged"].get("agentMessage", "")
+                    if last_msg:
+                        break
+                elif "agentMessage" in act:
+                    if isinstance(act["agentMessage"], dict):
+                        last_msg = act["agentMessage"].get("text", "")
+                    elif isinstance(act["agentMessage"], str):
+                        last_msg = act["agentMessage"]
+                    if last_msg:
+                        break
+                elif "userMessaged" in act and isinstance(act["userMessaged"], dict):
+                    last_msg = act["userMessaged"].get("userMessage", "")
+                    if last_msg:
+                        break
+                elif "userMessage" in act:
+                    if isinstance(act["userMessage"], dict):
+                        last_msg = act["userMessage"].get("text", "")
+                    elif isinstance(act["userMessage"], str):
+                        last_msg = act["userMessage"]
+                    if last_msg:
+                        break
+                elif "progressUpdated" in act and isinstance(act["progressUpdated"], dict):
                     desc = act["progressUpdated"].get("description", "")
                     title = act["progressUpdated"].get("title", "")
                     if desc or title:
                         last_msg = f"[{title}]\n{desc}" if title else desc
                         break
-                elif "agentMessage" in act and isinstance(act["agentMessage"], dict):
-                    last_msg = act["agentMessage"].get("text", "")
-                    break
-                elif "userMessage" in act and isinstance(act["userMessage"], dict):
-                    last_msg = act["userMessage"].get("text", "")
-                    break
                 elif "planGenerated" in act and "plan" in act["planGenerated"]:
                     steps = act["planGenerated"]["plan"].get("steps", [])
                     step_strs = [f"Step {idx+1}: {s.get('title', '')}" for idx, s in enumerate(steps)]
