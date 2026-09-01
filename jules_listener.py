@@ -89,7 +89,7 @@ def check_jules_api_queries():
     for session in res.get("sessions", []):
         session_id = session.get("name", "").split("/")[-1]
         state = session.get("state", "")
-        if state in ("AWAITING_INPUT", "USER_INPUT_REQUIRED", "PENDING_REVIEW", "AWAITING_USER_FEEDBACK"):
+        if state in ("AWAITING_INPUT", "USER_INPUT_REQUIRED", "PENDING_REVIEW", "AWAITING_USER_FEEDBACK", "PAUSED"):
             activities = get_session_activities(session_id)
             prompt_text = session.get("prompt", "")
             
