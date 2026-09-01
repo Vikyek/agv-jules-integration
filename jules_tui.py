@@ -53,16 +53,7 @@ def draw_menu(stdscr):
         except Exception:
             pass
 
-    selected_idx = 0
-    sessions_cache = []
-    last_fetch = 0
-    import subprocess
-    svc_check = subprocess.run(["systemctl", "--user", "is-active", "jules-listener.service"], capture_output=True, text=True)
-    svc_active = svc_check.stdout.strip() == "active"
-    svc_str = "[ACTIVE]" if svc_active else "[STOPPED]"
-
-    status_msg = f"Press 's' to {('stop' if svc_active else 'start')} service, 'm' to cycle mode, 'r' to refresh, 'a' to archive, 'q' to quit."
-    cfg = load_config()
+    action_msg = ""
 
     while True:
         stdscr.clear()
@@ -94,7 +85,7 @@ def draw_menu(stdscr):
 
         # Draw session table
         stdscr.addstr(3, 2, "ACTIVE & HISTORICAL SESSIONS:", curses.A_BOLD)
-        max_rows = min(height - 8, len(sessions_cache))
+        max_rows = min(height - 9, len(sessions_cache))
         
         if not sessions_cache:
             stdscr.addstr(5, 4, "No active sessions found.", curses.color_pair(3))
@@ -117,9 +108,16 @@ def draw_menu(stdscr):
                     stdscr.addstr(5 + i, 2, line[:width-4])
                     stdscr.attroff(color)
 
-        # Footer / Command bar
+        # Action notification message line (rendered above keybinding tips)
+        if action_msg:
+            stdscr.attron(curses.color_pair(3) | curses.A_BOLD)
+            stdscr.addstr(height - 3, 2, action_msg[:width-4])
+            stdscr.attroff(curses.color_pair(3) | curses.A_BOLD)
+
+        # Persistent Footer / Keybindings bar
+        key_tips = f"Keybindings: [s] {'stop' if svc_active else 'start'} service | [m] mode | [r] refresh | [k] add knowledge | [a] archive | [q] quit"
         stdscr.attron(curses.color_pair(1))
-        stdscr.addstr(height - 2, 2, status_msg[:width-4])
+        stdscr.addstr(height - 2, 2, key_tips[:width-4])
         stdscr.attroff(curses.color_pair(1))
 
         stdscr.refresh()
@@ -133,31 +131,31 @@ def draw_menu(stdscr):
         elif key == curses.KEY_DOWN and selected_idx < len(sessions_cache) - 1:
             selected_idx += 1
         elif key in (ord('s'), ord('S')):
-            status_msg = toggle_systemd_service()
+            action_msg = toggle_systemd_service()
             last_fetch = 0
         elif key in (ord('k'), ord('K')):
-            status_msg = prompt_knowledge_update(stdscr)
+            action_msg = prompt_knowledge_update(stdscr)
             last_fetch = 0
         elif key in (ord('r'), ord('R')):
             last_fetch = 0
-            status_msg = "Refreshed session list & cookies."
+            action_msg = "Refreshed session list & cookies."
         elif key in (ord('m'), ord('M')):
             modes = ["continuous", "once", "paused"]
             curr = cfg.get("mode", "continuous")
             nxt = modes[(modes.index(curr) + 1) % len(modes)]
             cfg["mode"] = nxt
             save_config(cfg)
-            status_msg = f"Listener mode updated to: {nxt.upper()}"
+            action_msg = f"Listener mode updated to: {nxt.upper()}"
         elif key in (ord('a'), ord('A')) and sessions_cache:
             curr_s = sessions_cache[selected_idx]
             sid = curr_s.get("id") or curr_s.get("name", "").split("/")[-1]
             archive_session(sid)
             last_fetch = 0
-            status_msg = f"Archived session {sid[:12]}"
+            action_msg = f"Archived session {sid[:12]}"
         elif key in (curses.KEY_ENTER, 10, 13) and sessions_cache:
             curr_s = sessions_cache[selected_idx]
             sid = curr_s.get("id") or curr_s.get("name", "").split("/")[-1]
-            status_msg = prompt_reply(stdscr, sid)
+            action_msg = prompt_reply(stdscr, sid)
             last_fetch = 0
 
 def toggle_systemd_service():
