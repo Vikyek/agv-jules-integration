@@ -1,6 +1,6 @@
-# 🤖 jules-integration
+# 🤖 agy-vules-integration
 
-Standalone Google Jules API Manager, Listener Daemon, TUI, and Conky HUD Display.
+Standalone Google Jules API Manager, Listener Daemon, TUI, and Conky HUD Display for Antigravity (AGY).
 
 ## 🚀 Features
 
