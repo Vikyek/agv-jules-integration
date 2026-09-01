@@ -346,7 +346,7 @@ def prompt_archived_panel(stdscr):
         # Fetch archived sessions
         res = list_sessions(include_archived=True)
         raw_sessions = res.get("sessions", []) if isinstance(res, dict) else []
-        archived_sessions = [s for s in raw_sessions if s.get("state") in ("ARCHIVED", "COMPLETED", "SUCCEEDED", "RESOLVED", "MERGED", "CLOSED")]
+        archived_sessions = [s for s in raw_sessions if s.get("archived") or s.get("state") in ("ARCHIVED", "COMPLETED", "SUCCEEDED", "RESOLVED", "MERGED", "CLOSED")]
         archived_sessions.sort(key=lambda x: x.get("updateTime") or x.get("createTime") or "")
 
         footer_tips = "Keybindings: [u] unarchive | [Enter] inspect details | [ESC] return to active sessions"
