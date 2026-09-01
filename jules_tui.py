@@ -398,50 +398,32 @@ def prompt_reply(stdscr, session_id, local_num, preloaded_data=None):
                 q_lines.extend(textwrap.wrap(f"[{ts}] {act}: {msg}", max_line_width))
 
         if isinstance(activities, dict) and "activities" in activities:
-            # Extract last ending agent message / question first
-            last_msg = ""
-            for act in reversed(activities["activities"]):
+            q_lines.append("")
+            q_lines.append("=== 📜 COMPLETE SESSION ACTION & ACTIVITY TIMELINE ===")
+            for act in activities["activities"]:
+                ctime = act.get("createTime", "")[:19].replace("T", " ")
                 if "agentMessaged" in act and isinstance(act["agentMessaged"], dict):
                     msg_text = act["agentMessaged"].get("agentMessage", "").strip()
                     if msg_text:
-                        last_msg = msg_text
-                        break
+                        q_lines.extend(textwrap.wrap(f"[{ctime}] 🤖 Agent: {msg_text}", max_line_width))
                 elif "agentMessage" in act:
                     msg_text = act["agentMessage"].get("text", "") if isinstance(act["agentMessage"], dict) else str(act["agentMessage"])
                     if msg_text.strip():
-                        last_msg = msg_text.strip()
-                        break
-
-            if not last_msg:
-                for act in reversed(activities["activities"]):
-                    if "progressUpdated" in act and isinstance(act["progressUpdated"], dict):
-                        desc = act["progressUpdated"].get("description", "").strip()
-                        title = act["progressUpdated"].get("title", "").strip()
-                        if desc or title:
-                            last_msg = f"[{title}]\n{desc}" if title else desc
-                            break
-
-            if not last_msg:
-                for act in reversed(activities["activities"]):
-                    if "userMessaged" in act and isinstance(act["userMessaged"], dict):
-                        last_msg = act["userMessaged"].get("userMessage", "")
-                        if last_msg:
-                            break
-                    elif "planGenerated" in act and "plan" in act["planGenerated"]:
-                        steps = act["planGenerated"]["plan"].get("steps", [])
-                        step_strs = [f"Step {idx+1}: {s.get('title', '')}" for idx, s in enumerate(steps)]
-                        last_msg = "Plan Steps:\n" + "\n".join(step_strs)
-                        break
-
-            if last_msg:
-                q_lines.append("")
-                q_lines.append("=== 💬 LATEST JULES AGENT QUESTION / MESSAGE ===")
-                for l in last_msg.splitlines():
-                    wrapped_sub = textwrap.wrap(l, max_line_width)
-                    if wrapped_sub:
-                        q_lines.extend(wrapped_sub)
-                    else:
-                        q_lines.append("")
+                        q_lines.extend(textwrap.wrap(f"[{ctime}] 🤖 Agent: {msg_text.strip()}", max_line_width))
+                elif "userMessaged" in act and isinstance(act["userMessaged"], dict):
+                    msg_text = act["userMessaged"].get("userMessage", "").strip()
+                    if msg_text:
+                        q_lines.extend(textwrap.wrap(f"[{ctime}] 👤 User: {msg_text}", max_line_width))
+                elif "progressUpdated" in act and isinstance(act["progressUpdated"], dict):
+                    title = act["progressUpdated"].get("title", "").strip()
+                    desc = act["progressUpdated"].get("description", "").strip()
+                    if title or desc:
+                        info = f"{title}: {desc}" if (title and desc) else (title or desc)
+                        q_lines.extend(textwrap.wrap(f"[{ctime}] ⚙️ Progress: {info}", max_line_width))
+                elif "planGenerated" in act and "plan" in act["planGenerated"]:
+                    steps = act["planGenerated"]["plan"].get("steps", [])
+                    step_strs = [s.get('title', '') for s in steps]
+                    q_lines.extend(textwrap.wrap(f"[{ctime}] 📋 Plan Generated: {', '.join(step_strs)}", max_line_width))
 
         # Modal Header
         header = f" 🔍 SESSION INSPECTION & LOGS [#{local_num}] "
