@@ -24,8 +24,9 @@ ln -sf "$SCRIPT_DIR/jules_hud.py" "$BIN_DIR/jules-hud"
 ln -sf "$SCRIPT_DIR/jules_scraper.py" "$BIN_DIR/jules-scraper"
 ln -sf "$SCRIPT_DIR/jules_cookie_extractor.py" "$BIN_DIR/jules-cookie-extractor"
 
-echo "🖥️ [jules-integration] Installing desktop entry..."
+echo "🖥️ [jules-integration] Installing desktop entries..."
 cp "$SCRIPT_DIR/jules-tui.desktop" "$DESKTOP_DIR/jules-tui.desktop"
+cp "$SCRIPT_DIR/jules-hud.desktop" "$DESKTOP_DIR/jules-hud.desktop"
 
 echo "⚙️ [jules-integration] Installing systemd user service..."
 cp "$SCRIPT_DIR/jules-listener.service" "$SYSTEMD_USER_DIR/jules-listener.service"

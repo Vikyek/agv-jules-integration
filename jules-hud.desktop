@@ -1,0 +1,9 @@
+[Desktop Entry]
+Name=Jules HUD Display
+Comment=Conky-like live status HUD stream for Google Jules sessions
+Exec=/usr/sbin/kitty --title "Jules HUD" -e /home/v/.local/bin/jules-hud --watch
+Icon=utilities-system-monitor
+Terminal=false
+Type=Application
+Categories=Development;Utility;System;
+Keywords=jules;hud;conky;status;monitor;
