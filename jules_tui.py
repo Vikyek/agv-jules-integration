@@ -110,7 +110,6 @@ def draw_menu(stdscr):
                 sid = s.get("id") or s.get("name", "").split("/")[-1]
                 state = s.get("state", "UNKNOWN")
                 title = s.get("title") or s.get("prompt", "").replace("\n", " ")
-                display_title = title[:width - 45]
 
                 if "COMPLETED" in state or "SUCCEEDED" in state or "RESOLVED" in state:
                     color = curses.color_pair(2)
@@ -120,15 +119,31 @@ def draw_menu(stdscr):
                     color = curses.color_pair(1) | curses.A_BOLD
                 else:
                     color = curses.color_pair(1)
-                
-                line = f"{' >' if i == selected_idx else '  '} [{sid[:12]}] {state:<22} | {display_title}"
+
+                prefix = ">" if i == selected_idx else " "
+
+                # Responsive layout scaling based on terminal width
+                if width < 60:
+                    # Compact view for small windows
+                    short_state = state.replace("AWAITING_USER_FEEDBACK", "FEEDBACK").replace("IN_PROGRESS", "RUNNING")
+                    line = f"{prefix} [{sid[:8]}] {short_state[:8]} | {title}"
+                elif width < 90:
+                    # Medium view
+                    short_state = state.replace("AWAITING_USER_FEEDBACK", "FEEDBACK")
+                    line = f"{prefix} [{sid[:10]}] {short_state:<12} | {title}"
+                else:
+                    # Full wide view with tight padding
+                    line = f"{prefix} [{sid[:12]}] {state:<23} | {title}"
+
+                display_line = line[:width - 3]
+
                 if i == selected_idx:
                     stdscr.attron(curses.A_REVERSE)
-                    stdscr.addstr(5 + i, 2, line[:width-4])
+                    stdscr.addstr(5 + i, 1, display_line)
                     stdscr.attroff(curses.A_REVERSE)
                 else:
                     stdscr.attron(color)
-                    stdscr.addstr(5 + i, 2, line[:width-4])
+                    stdscr.addstr(5 + i, 1, display_line)
                     stdscr.attroff(color)
 
         # Action notification message line (rendered above keybinding tips)
