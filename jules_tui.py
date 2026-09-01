@@ -29,7 +29,10 @@ def save_config(cfg):
         json.dump(cfg, f, indent=2)
 
 def draw_menu(stdscr):
-    curses.curs_set(0)
+    try:
+        curses.curs_set(0)
+    except Exception:
+        pass
     curses.use_default_colors()
     curses.init_pair(1, curses.COLOR_CYAN, -1)
     curses.init_pair(2, curses.COLOR_GREEN, -1)
@@ -134,14 +137,20 @@ def draw_menu(stdscr):
 def prompt_knowledge_update(stdscr):
     height, width = stdscr.getmaxyx()
     curses.echo()
-    curses.curs_set(1)
+    try:
+        curses.curs_set(1)
+    except Exception:
+        pass
     stdscr.addstr(height - 3, 2, " " * (width - 4))
     stdscr.addstr(height - 3, 2, "Add Jules Knowledge Rule (e.g. repo:rule): ", curses.color_pair(3) | curses.A_BOLD)
     stdscr.refresh()
     
     msg_bytes = stdscr.getstr(height - 3, 44, width - 48)
     curses.noecho()
-    curses.curs_set(0)
+    try:
+        curses.curs_set(0)
+    except Exception:
+        pass
     
     text = msg_bytes.decode('utf-8').strip()
     if text and ":" in text:
@@ -154,14 +163,20 @@ def prompt_knowledge_update(stdscr):
 def prompt_reply(stdscr, session_id):
     height, width = stdscr.getmaxyx()
     curses.echo()
-    curses.curs_set(1)
+    try:
+        curses.curs_set(1)
+    except Exception:
+        pass
     stdscr.addstr(height - 3, 2, " " * (width - 4))
     stdscr.addstr(height - 3, 2, f"Enter response for [{session_id[:12]}]: ", curses.color_pair(3) | curses.A_BOLD)
     stdscr.refresh()
     
     msg_bytes = stdscr.getstr(height - 3, 36, width - 40)
     curses.noecho()
-    curses.curs_set(0)
+    try:
+        curses.curs_set(0)
+    except Exception:
+        pass
     
     text = msg_bytes.decode('utf-8').strip()
     if text:
