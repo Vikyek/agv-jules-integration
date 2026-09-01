@@ -189,11 +189,11 @@ def draw_menu(stdscr):
             stdscr.addstr(msg_y, 1, action_msg[:width-2])
             stdscr.attroff(curses.color_pair(3) | curses.A_BOLD)
 
-        # Persistent Multi-Line Footer / Keybindings bar
+        # Persistent Multi-Line Footer / Keybindings bar (Centered)
         for idx, f_line in enumerate(footer_lines):
             f_y = height - footer_height + idx
             stdscr.attron(curses.color_pair(1))
-            stdscr.addstr(f_y, 1, f_line[:width-2])
+            stdscr.addstr(f_y, 0, f_line.center(width)[:width])
             stdscr.attroff(curses.color_pair(1))
         stdscr.attroff(curses.color_pair(1))
 
