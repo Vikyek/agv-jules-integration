@@ -126,7 +126,7 @@ def draw_menu(stdscr):
                     break
 
                 s = sessions_cache[i]
-                sid = s.get("id") or s.get("name", "").split("/")[-1]
+                local_num = i + 1
                 state = s.get("state", "UNKNOWN")
                 title = s.get("title") or s.get("prompt", "").replace("\n", " ")
 
@@ -143,12 +143,12 @@ def draw_menu(stdscr):
 
                 if width < 80:
                     short_state = state.replace("AWAITING_USER_FEEDBACK", "FEEDBACK").replace("IN_PROGRESS", "RUNNING")
-                    meta_prefix = f"{prefix} [{sid[:8]}] {short_state[:8]} | "
+                    meta_prefix = f"{prefix} [#{local_num}] {short_state[:8]} | "
                 elif width < 120:
                     short_state = state.replace("AWAITING_USER_FEEDBACK", "FEEDBACK")
-                    meta_prefix = f"{prefix} [{sid[:10]}] {short_state:<12} | "
+                    meta_prefix = f"{prefix} [#{local_num:<2}] {short_state:<12} | "
                 else:
-                    meta_prefix = f"{prefix} [{sid[:12]}] {state:<23} | "
+                    meta_prefix = f"{prefix} [#{local_num:<2}] {state:<23} | "
 
                 meta_len = len(meta_prefix)
                 title_width = max(10, width - meta_len - 3)
@@ -243,7 +243,7 @@ def draw_menu(stdscr):
         elif key in (curses.KEY_ENTER, 10, 13) and sessions_cache:
             curr_s = sessions_cache[selected_idx]
             sid = curr_s.get("id") or curr_s.get("name", "").split("/")[-1]
-            action_msg = prompt_reply(stdscr, sid)
+            action_msg = prompt_reply(stdscr, sid, selected_idx + 1)
             last_fetch = 0
 def toggle_systemd_service():
     check = subprocess.run(["systemctl", "--user", "is-active", "jules-listener.service"], capture_output=True, text=True)
@@ -294,7 +294,7 @@ def toggle_systemd_autostart():
 
 import textwrap
 
-def prompt_reply(stdscr, session_id):
+def prompt_reply(stdscr, session_id, local_num):
     # Pre-fetch session activities and session details ONCE upon entering the modal
     activities = get_session_activities(session_id)
     sess = _make_request(f"sessions/{session_id}") if '_make_request' in globals() else {}
@@ -312,7 +312,7 @@ def prompt_reply(stdscr, session_id):
         max_line_width = max(20, width - 8)
         q_lines = []
         
-        title_str = sess.get("title") or f"Session {session_id[:12]}"
+        title_str = sess.get("title") or f"Session #{local_num}"
         if title_str:
             q_lines.extend(textwrap.wrap(f"Title: {title_str}", max_line_width))
             
@@ -369,7 +369,7 @@ def prompt_reply(stdscr, session_id):
                         q_lines.append("")
 
         # Modal Header
-        header = f" ❓ JULES QUERY RESOLUTION PANEL [{session_id[:12]}] "
+        header = f" ❓ JULES QUERY RESOLUTION PANEL [#{local_num}] "
         stdscr.attron(curses.color_pair(5) | curses.A_BOLD)
         stdscr.addstr(0, 0, header[:width].center(width))
         stdscr.attroff(curses.color_pair(5) | curses.A_BOLD)
