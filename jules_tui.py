@@ -68,6 +68,8 @@ def draw_menu(stdscr):
 
     listen_frames = ["📡", "🛰️", "⚡", "✨"]
 
+    view_archived = False
+
     while True:
         stdscr.clear()
         height, width = stdscr.getmaxyx()
@@ -91,10 +93,11 @@ def draw_menu(stdscr):
         stdscr.attroff(curses.color_pair(4) | curses.A_BOLD)
 
         # Mode line (Centered)
+        view_tag = "ARCHIVED HISTORY" if view_archived else "ACTIVE"
         if width < 80:
-            mode_str = f"Mode:[{cfg.get('mode', 'continuous')[:4].upper()}] Svc:[{svc_str} {listen_icon}] Auto:[{auto_str[:3]}]"
+            mode_str = f"View:[{view_tag[:4]}] Svc:[{svc_str} {listen_icon}] Auto:[{auto_str[:3]}]"
         else:
-            mode_str = f"Mode: [{cfg.get('mode', 'continuous').upper()}] | Service: [{svc_str} {listen_icon}] | Autostart: [{auto_str}]"
+            mode_str = f"View: [{view_tag}] | Mode: [{cfg.get('mode', 'continuous').upper()}] | Service: [{svc_str} {listen_icon}] | Autostart: [{auto_str}]"
             
         stdscr.attron(curses.color_pair(1) | curses.A_BOLD)
         stdscr.addstr(1, 0, mode_str.center(width)[:width])
@@ -103,28 +106,36 @@ def draw_menu(stdscr):
         # Fetch sessions periodically or on start
         now = time.time()
         if now - last_fetch > 10 or not sessions_cache:
-            res = list_sessions()
-            sessions_cache = res.get("sessions", []) if isinstance(res, dict) else []
+            res = list_sessions(include_archived=view_archived)
+            raw_sessions = res.get("sessions", []) if isinstance(res, dict) else []
+            if view_archived:
+                sessions_cache = [s for s in raw_sessions if s.get("state") in ("ARCHIVED", "COMPLETED", "SUCCEEDED", "RESOLVED", "MERGED", "CLOSED")]
+            else:
+                sessions_cache = [s for s in raw_sessions if s.get("state") not in ("ARCHIVED", "CLOSED")]
+                
+            # Sort chronologically by createTime / updateTime
+            sessions_cache.sort(key=lambda x: x.get("createTime") or x.get("updateTime") or "")
             last_fetch = now
 
         # Multi-line footer keybindings bar wrapping calculation
         if width < 80:
-            raw_tips = f"[s] {'stop' if svc_active else 'start'} | [b] autostart | [m] mode | [r] refresh | [a] archive | [q] quit"
+            raw_tips = f"[s] {'stop' if svc_active else 'start'} | [b] auto | [h] {'active' if view_archived else 'history'} | [u] unarchive | [a] archive | [q] quit"
         else:
-            raw_tips = f"Keybindings: [s] {'stop' if svc_active else 'start'} service | [b] {'disable' if auto_enabled else 'enable'} autostart | [m] mode | [r] refresh | [a] archive | [q] quit"
+            raw_tips = f"Keybindings: [s] {'stop' if svc_active else 'start'} service | [b] autostart | [h] view {'active' if view_archived else 'history'} | [u] unarchive | [a] archive | [q] quit"
 
         footer_lines = textwrap.wrap(raw_tips, max(20, width - 4)) or [raw_tips]
         footer_height = len(footer_lines)
 
         # Draw session table with title wrapping
-        stdscr.addstr(3, 1, "SESSIONS:", curses.A_BOLD)
+        view_hdr = "ARCHIVED SESSION HISTORY (CHRONOLOGICAL):" if view_archived else "ACTIVE SESSIONS (CHRONOLOGICAL):"
+        stdscr.addstr(3, 1, view_hdr[:width-2], curses.A_BOLD)
         
         # Calculate available vertical space for sessions list
         available_height = height - 5 - footer_height - (1 if action_msg else 0)
         curr_y = 5
 
         if not sessions_cache:
-            stdscr.addstr(5, 2, "No active sessions found.", curses.color_pair(3))
+            stdscr.addstr(5, 2, f"No {'archived' if view_archived else 'active'} sessions found.", curses.color_pair(3))
         else:
             for i in range(len(sessions_cache)):
                 if curr_y >= 4 + available_height:
@@ -137,18 +148,16 @@ def draw_menu(stdscr):
                 if not raw_title or len(raw_title) > 100 or "\n" in raw_title:
                     title_lines = [l.strip() for l in (raw_title or s.get("prompt", "")).splitlines() if l.strip()]
                     raw_title = title_lines[0] if title_lines else "Untitled Session"
-                    # If first line is a generic header like '# 🔒 Security Vulnerability Fix Task', look for Issue / File details
                     if ("Security Vulnerability" in raw_title or "Performance Optimization" in raw_title or "Testing Improvement" in raw_title) and len(title_lines) > 1:
                         for line in title_lines[1:]:
                             if "Issue:" in line or "File:" in line:
                                 raw_title = line
                                 break
 
-                # Remove markdown headers like # or 🔒 and replace newlines
                 clean_title = raw_title.lstrip("#").strip().replace("\n", " ")
                 title = clean_title
 
-                if "COMPLETED" in state or "SUCCEEDED" in state or "RESOLVED" in state:
+                if "COMPLETED" in state or "SUCCEEDED" in state or "RESOLVED" in state or "ARCHIVED" in state:
                     color = curses.color_pair(2)
                 elif "FEEDBACK" in state or "INPUT" in state or "REVIEW" in state:
                     color = curses.color_pair(3)
@@ -242,9 +251,14 @@ def draw_menu(stdscr):
         elif key in (ord('b'), ord('B')):
             action_msg = toggle_systemd_autostart()
             last_fetch = 0
+        elif key in (ord('h'), ord('H')):
+            view_archived = not view_archived
+            selected_idx = 0
+            last_fetch = 0
+            action_msg = f"Switched view to {'Archived History' if view_archived else 'Active Sessions'}."
         elif key in (ord('r'), ord('R')):
             last_fetch = 0
-            action_msg = "Refreshed session list & cookies."
+            action_msg = "Refreshed session list."
         elif key in (ord('m'), ord('M')):
             modes = ["continuous", "once", "paused"]
             curr = cfg.get("mode", "continuous")
@@ -257,7 +271,14 @@ def draw_menu(stdscr):
             sid = curr_s.get("id") or curr_s.get("name", "").split("/")[-1]
             archive_session(sid)
             last_fetch = 0
-            action_msg = f"Archived session {sid[:12]}"
+            action_msg = f"Archived session #{selected_idx + 1}"
+        elif key in (ord('u'), ord('U')) and sessions_cache:
+            from jules_manager import unarchive_session
+            curr_s = sessions_cache[selected_idx]
+            sid = curr_s.get("id") or curr_s.get("name", "").split("/")[-1]
+            unarchive_session(sid)
+            last_fetch = 0
+            action_msg = f"Unarchived session #{selected_idx + 1}"
         elif key in (curses.KEY_ENTER, 10, 13) and sessions_cache:
             curr_s = sessions_cache[selected_idx]
             sid = curr_s.get("id") or curr_s.get("name", "").split("/")[-1]

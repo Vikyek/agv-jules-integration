@@ -70,9 +70,10 @@ def list_sources():
     """Lists connected repositories."""
     return _make_request("sources")
 
-def list_sessions():
+def list_sessions(include_archived=False):
     """Lists active and historical coding sessions."""
-    return _make_request("sessions")
+    endpoint = "sessions?includeArchived=true" if include_archived else "sessions"
+    return _make_request(endpoint)
 
 def create_session(prompt, source_name, branch="main"):
     """
@@ -104,6 +105,10 @@ def send_message(session_id, message_text):
 def archive_session(session_id):
     """Archives a completed or handled session."""
     return _make_request(f"sessions/{session_id}:archive", method="POST")
+
+def unarchive_session(session_id):
+    """Unarchives an archived session."""
+    return _make_request(f"sessions/{session_id}:unarchive", method="POST")
 
 def main():
     parser = argparse.ArgumentParser(description="Google Jules API Manager")
