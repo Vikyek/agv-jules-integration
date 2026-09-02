@@ -824,7 +824,7 @@ def prompt_suggestions_panel(stdscr):
             selected_idx -= 1
         elif ch == curses.KEY_DOWN and selected_idx < len(suggestions) - 1:
             selected_idx += 1
-        elif ch in (ord('g'), ord('G')) and suggestions:
+        elif ch in (ord('g'), ord('G'), curses.KEY_ENTER, 10, 13) and suggestions:
             curr_sug = suggestions[selected_idx]
             task_title = curr_sug.get("title", "")
             task_details = curr_sug.get("details", "")
@@ -834,7 +834,8 @@ def prompt_suggestions_panel(stdscr):
             # Spawn interactive terminal window running AGY with the /plan prompt
             try:
                 import subprocess
-                subprocess.Popen(["i3-msg", "exec", "--no-startup-id", f"/usr/sbin/kitty --title 'AGY - {task_title[:30]}' -e /usr/sbin/agy '{prompt_str}'"])
+                cmd = ["i3-msg", "exec", "--no-startup-id", f"/usr/sbin/kitty --title 'AGY - {task_title[:20]}' -e /usr/sbin/agy '{prompt_str}'"]
+                subprocess.Popen(cmd)
                 status_msg = f"🚀 Launched interactive AGY /plan window for suggestion #{selected_idx + 1}"
             except Exception as e:
                 status_msg = f"Error launching AGY window: {e}"
