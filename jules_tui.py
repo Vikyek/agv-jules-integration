@@ -609,6 +609,8 @@ def draw_menu(stdscr):
         elif key == curses.KEY_MOUSE:
             try:
                 _, mx, my, _, bstate = curses.getmouse()
+                if not (bstate & (curses.BUTTON1_CLICKED | curses.BUTTON1_RELEASED)):
+                    continue
                 if my == 1:
                     # Click top mode bar to toggle service
                     action_name = "Stop background listener service?" if svc_active else "Start background listener service?"
@@ -849,6 +851,8 @@ def prompt_suggestions_panel(stdscr):
         if ch == curses.KEY_MOUSE:
             try:
                 _, mx, my, _, bstate = curses.getmouse()
+                if not (bstate & (curses.BUTTON1_CLICKED | curses.BUTTON1_RELEASED)):
+                    continue
                 if my == height - 1:
                     # Footer click -> return to main menu
                     stdscr.timeout(1000)
@@ -897,8 +901,11 @@ def prompt_suggestions_panel(stdscr):
             agy_mode = cfg.get("agy_mode", "plan")
             skip_perms = cfg.get("agy_skip_permissions", True)
             
+            safe_title = task_title.replace("'", "").replace('"', "")
+            safe_details = task_details.replace("'", "").replace('"', "")
+
             prompt_prefix = f"/{agy_mode} " if agy_mode == "plan" else ""
-            prompt_str = f"{prompt_prefix}{task_title}: {task_details} in {repo_name}"
+            prompt_str = f"{prompt_prefix}{safe_title}: {safe_details} in {repo_name}"
             
             flags = f"--mode {agy_mode}"
             if skip_perms:
@@ -907,7 +914,7 @@ def prompt_suggestions_panel(stdscr):
             try:
                 import subprocess
                 runner_bin = os.path.expanduser("~/.local/bin/jules-suggestion-runner")
-                cmd = ["i3-msg", f"exec --no-startup-id /usr/sbin/kitty --title 'AGY - {task_title[:20]}' {runner_bin} '{task_title}' run '{prompt_str}' '{flags}'"]
+                cmd = ["i3-msg", f'exec --no-startup-id /usr/sbin/kitty --title "AGY Task" {runner_bin} "{safe_title}" run "{prompt_str}" "{flags}"']
                 subprocess.Popen(cmd)
                 status_msg = f"🚀 Launched non-interactive AGY ({agy_mode}) task for suggestion #{selected_idx + 1}"
             except Exception as e:
@@ -921,8 +928,9 @@ def prompt_suggestions_panel(stdscr):
             cfg = load_config()
             skip_perms = cfg.get("agy_skip_permissions", True)
             
+            safe_title = task_title.replace("'", "").replace('"', "")
             safe_details = task_details.replace("'", "").replace('"', "")
-            check_prompt = f"Check if the following suggestion is already completed or fixed in {repo_name}: {task_title} - {safe_details}. If it is fixed or satisfied, output SUCCESS. Otherwise output INCOMPLETE."
+            check_prompt = f"Check if suggestion is completed in {repo_name}: {safe_title} - {safe_details}. If fixed output SUCCESS else INCOMPLETE."
             flags = "--mode accept-edits"
             if skip_perms:
                 flags += " --dangerously-skip-permissions"
@@ -930,7 +938,7 @@ def prompt_suggestions_panel(stdscr):
             try:
                 import subprocess
                 runner_bin = os.path.expanduser("~/.local/bin/jules-suggestion-runner")
-                cmd = ["i3-msg", f"exec --no-startup-id /usr/sbin/kitty --title 'AGY Check - {task_title[:20]}' {runner_bin} '{task_title}' check '{check_prompt}' '{flags}'"]
+                cmd = ["i3-msg", f'exec --no-startup-id /usr/sbin/kitty --title "AGY Check" {runner_bin} "{safe_title}" check "{check_prompt}" "{flags}"']
                 subprocess.Popen(cmd)
                 status_msg = f"🔍 Launched AGY verification check for suggestion #{selected_idx + 1}"
             except Exception as e:
