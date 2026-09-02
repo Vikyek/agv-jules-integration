@@ -951,12 +951,15 @@ def prompt_suggestion_details_panel(stdscr, sug, agy_status=""):
     action_history = []
     try:
         log_file = os.path.expanduser("~/.config/jules/agy_actions.json")
-        if os.path.exists(log_file):
+        if os.path.exists(log_file) and os.path.getsize(log_file) > 0:
             with open(log_file, "r") as f:
                 all_actions = json.load(f)
+                norm_title = title.strip().lower()
                 for sid, events in all_actions.items():
                     for ev in events:
-                        if ev.get("title", "") == title or sid == title:
+                        ev_title = ev.get("title", "").strip().lower()
+                        ev_sid = str(sid).strip().lower()
+                        if norm_title and (norm_title in ev_title or ev_title in norm_title or norm_title in ev_sid or ev_sid in norm_title):
                             action_history.append(ev)
         action_history.sort(key=lambda x: x.get("timestamp_epoch", 0))
     except Exception:

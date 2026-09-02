@@ -108,9 +108,12 @@ def log_action(session_id, action_type, message, title="", repo="", branch="", a
         log_file = os.path.expanduser("~/.config/jules/agy_actions.json")
         os.makedirs(os.path.dirname(log_file), exist_ok=True)
         actions = {}
-        if os.path.exists(log_file):
-            with open(log_file, "r") as f:
-                actions = json.load(f)
+        if os.path.exists(log_file) and os.path.getsize(log_file) > 0:
+            try:
+                with open(log_file, "r") as f:
+                    actions = json.load(f)
+            except Exception:
+                actions = {}
         if session_id not in actions:
             actions[session_id] = []
         
