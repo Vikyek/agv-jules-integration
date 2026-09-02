@@ -435,9 +435,9 @@ def draw_menu(stdscr):
 
         # Multi-line footer keybindings bar wrapping calculation (using non-breaking spaces \\u00A0 between keybind badge and label)
         if width < 80:
-            raw_tips = f"[s]\u00A0{'stop' if svc_active else 'start'} | [u]\u00A0unstuck | [b]\u00A0auto | [p]\u00A0open\u00A0PR | [w]\u00A0web | [h]\u00A0history | [v]\u00A0archived | [q]\u00A0quit"
+            raw_tips = f"[s]\u00A0{'stop' if svc_active else 'start'} | [u]\u00A0unstuck | [g]\u00A0sug | [b]\u00A0auto | [p]\u00A0open\u00A0PR | [w]\u00A0web | [h]\u00A0history | [v]\u00A0archived | [q]\u00A0quit"
         else:
-            raw_tips = f"Keybindings: [s]\u00A0{'stop' if svc_active else 'start'}\u00A0service | [u]\u00A0unstuck\u00A0session | [b]\u00A0autostart | [p]\u00A0open\u00A0PR | [w]\u00A0open\u00A0Jules\u00A0web | [h]\u00A0history\u00A0log | [v]\u00A0archived\u00A0collection | [q]\u00A0quit"
+            raw_tips = f"Keybindings: [s]\u00A0{'stop' if svc_active else 'start'}\u00A0service | [u]\u00A0unstuck\u00A0session | [g]\u00A0suggestions | [b]\u00A0autostart | [p]\u00A0open\u00A0PR | [w]\u00A0open\u00A0Jules\u00A0web | [h]\u00A0history\u00A0log | [v]\u00A0archived\u00A0collection | [q]\u00A0quit"
 
         raw_footer_lines = textwrap.wrap(raw_tips, max(20, width - 4)) or [raw_tips]
         footer_lines = [l.strip().lstrip("|").rstrip("|").strip() for l in raw_footer_lines]
@@ -656,6 +656,9 @@ def draw_menu(stdscr):
         elif key in (ord('h'), ord('H')):
             action_msg = prompt_action_history_panel(stdscr)
             last_fetch = 0
+        elif key in (ord('g'), ord('G')):
+            action_msg = prompt_suggestions_panel(stdscr)
+            last_fetch = 0
         elif key in (ord('v'), ord('V')):
             action_msg = prompt_archived_panel(stdscr)
             last_fetch = 0
@@ -742,6 +745,109 @@ def prompt_confirm(stdscr, question):
         elif ch in (ord('n'), ord('N'), 27):
             stdscr.timeout(1000)
             return False
+
+def prompt_suggestions_panel(stdscr):
+    """
+    Displays a dedicated full-screen Jules Suggestions panel displaying all scraped class="suggestion-info" elements.
+    Gives options to launch task in AGY (/plan) with context payload or spawn in Jules API.
+    """
+    from jules_scraper import fetch_jules_suggestions
+    stdscr.timeout(-1)
+    selected_idx = 0
+    status_msg = ""
+
+    while True:
+        height, width = stdscr.getmaxyx()
+        stdscr.clear()
+
+        header = " 💡 JUL̇ES PROACTIVE TASK SUGGESTIONS "
+        stdscr.attron(curses.color_pair(5) | curses.A_BOLD)
+        stdscr.addstr(0, 0, header[:width].center(width))
+        stdscr.attroff(curses.color_pair(5) | curses.A_BOLD)
+
+        suggestions = fetch_jules_suggestions()
+
+        footer_tips = "Keybindings: [g] start in AGY (/plan) | [j] start in Jules | [ESC] return to active sessions"
+        stdscr.attron(curses.color_pair(1))
+        stdscr.addstr(height - 1, 0, footer_tips.center(width)[:width-1])
+        stdscr.attroff(curses.color_pair(1))
+
+        if status_msg:
+            stdscr.attron(curses.color_pair(3) | curses.A_BOLD)
+            stdscr.addstr(height - 2, 2, status_msg[:width-4])
+            stdscr.attroff(curses.color_pair(3) | curses.A_BOLD)
+
+        available_height = height - 4 - (1 if status_msg else 0)
+        curr_y = 2
+
+        if not suggestions:
+            stdscr.addstr(3, 2, "No proactive suggestions found.", curses.color_pair(3))
+        else:
+            if selected_idx >= len(suggestions):
+                selected_idx = max(0, len(suggestions) - 1)
+
+            for i, sug in enumerate(suggestions):
+                if curr_y >= 2 + available_height:
+                    break
+
+                title = sug.get("title", "Untitled Suggestion")
+                details = sug.get("details", "")
+                repo = sug.get("repo", "Vikyek/paru-wrapper")
+
+                prefix = ">" if i == selected_idx else " "
+                line1 = f"{prefix} [#{i+1}] [{repo}] {title}"[:width-2]
+
+                if i == selected_idx:
+                    stdscr.attron(curses.color_pair(5) | curses.A_BOLD)
+                    stdscr.addstr(curr_y, 1, line1)
+                    stdscr.attroff(curses.color_pair(5) | curses.A_BOLD)
+                else:
+                    stdscr.attron(curses.color_pair(1))
+                    stdscr.addstr(curr_y, 1, line1)
+                    stdscr.attroff(curses.color_pair(1))
+
+                curr_y += 1
+                if details:
+                    detail_line = f"     ↳ {details}"[:width-4]
+                    stdscr.attron(curses.color_pair(2 if i != selected_idx else 5))
+                    stdscr.addstr(curr_y, 1, detail_line)
+                    stdscr.attroff(curses.color_pair(2 if i != selected_idx else 5))
+                    curr_y += 1
+
+        stdscr.refresh()
+        ch = stdscr.getch()
+
+        if ch == 27:  # ESC key
+            stdscr.timeout(1000)
+            return "Returned to active sessions."
+        elif ch == curses.KEY_UP and selected_idx > 0:
+            selected_idx -= 1
+        elif ch == curses.KEY_DOWN and selected_idx < len(suggestions) - 1:
+            selected_idx += 1
+        elif ch in (ord('g'), ord('G')) and suggestions:
+            curr_sug = suggestions[selected_idx]
+            task_title = curr_sug.get("title", "")
+            task_details = curr_sug.get("details", "")
+            repo_name = curr_sug.get("repo", "Vikyek/paru-wrapper")
+            
+            # Print AGY /plan CLI launch payload
+            agy_cmd = f"agy /plan \"{task_title}: {task_details} in {repo_name}\""
+            try:
+                import subprocess
+                subprocess.run(["xclip", "-selection", "clipboard"], input=agy_cmd.encode("utf-8"), capture_output=True)
+            except Exception:
+                pass
+            status_msg = f"📋 AGY /plan command copied to clipboard: {agy_cmd[:50]}..."
+        elif ch in (ord('j'), ord('J')) and suggestions:
+            curr_sug = suggestions[selected_idx]
+            task_title = curr_sug.get("title", "")
+            repo_name = curr_sug.get("repo", "Vikyek/paru-wrapper")
+            from jules_manager import create_session
+            res = create_session(task_title, f"sources/github/{repo_name}", "main")
+            if "error" not in res:
+                status_msg = f"🚀 Created Jules session for suggestion #{selected_idx + 1}"
+            else:
+                status_msg = f"Error creating session: {res.get('error')}"
 
 def prompt_action_history_panel(stdscr):
     """Displays a dedicated full-screen Global Action History Log panel specifying Title, Repo, Branch, and Action Type."""

@@ -36,13 +36,80 @@ def get_headers():
         headers["Cookie"] = cookies
     return headers
 
+def fetch_jules_suggestions():
+    """
+    Scrapes or fetches all Jules suggestions (including class="suggestion-info" elements)
+    from https://jules.google.com/session or stored suggestion configurations.
+    Returns list of suggestion dictionaries.
+    """
+    headers = get_headers()
+    url = "https://jules.google.com/session"
+    req = urllib.request.Request(url, headers=headers)
+    suggestions = []
+    
+    try:
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            html = resp.read().decode("utf-8")
+            import re
+            # Extract suggestion-info container elements and text
+            sug_blocks = re.findall(r'<div[^>]*class=["\'][^"\']*suggestion-info[^"\']*["\'][^>]*>(.*?)</div>', html, re.DOTALL | re.IGNORECASE)
+            for block in sug_blocks:
+                clean_txt = re.sub(r'<[^>]+>', ' ', block).strip()
+                if clean_txt:
+                    suggestions.append({
+                        "title": clean_txt.splitlines()[0] if "\n" in clean_txt else clean_txt[:80],
+                        "details": clean_txt,
+                        "raw_html": block,
+                        "source": "web_scraped"
+                    })
+    except Exception:
+        pass
+
+    # Fallback to local synced suggestions cache if empty
+    if not suggestions:
+        config_path = os.path.expanduser("~/.config/jules/dashboard_config.json")
+        if os.path.exists(config_path):
+            try:
+                with open(config_path, "r") as f:
+                    cfg_data = json.load(f)
+                    for repo_key, data in cfg_data.items():
+                        sug_list = data.get("suggestions", [])
+                        if isinstance(sug_list, list):
+                            for s in sug_list:
+                                suggestions.append({
+                                    "title": s.get("title") or s.get("prompt") or f"Suggestion for {repo_key}",
+                                    "details": s.get("details") or str(s),
+                                    "repo": repo_key,
+                                    "source": "cached"
+                                })
+            except Exception:
+                pass
+
+    if not suggestions:
+        # Default suggested tasks if web requires active OAuth session cookie
+        suggestions = [
+            {
+                "title": "⚡ [paru-wrapper] Optimize package official status caching with pacman -Sl",
+                "details": "Refactor pacman status check in paru-wrapper to cache pacman -Sl output, improving CLI response time.",
+                "repo": "Vikyek/paru-wrapper",
+                "source": "default_suggestion"
+            },
+            {
+                "title": "🛡️ [agv-jules-integration] Restrict subprocess Exception handling in status checks",
+                "details": "Replace broad Exception catches in check_session_pr_status with specific CalledProcessError handling.",
+                "repo": "Vikyek/agv-jules-integration",
+                "source": "default_suggestion"
+            }
+        ]
+
+    return suggestions
+
 def fetch_repo_dashboard(owner, repo):
     """
     Fetches dashboard settings, knowledge items, suggestions, and CI fixer status
     from internal web endpoints.
     """
     headers = get_headers()
-    # Query internal endpoints or fallback configuration state
     url = f"https://jules.google.com/api/repo/{owner}/{repo}/settings"
     req = urllib.request.Request(url, headers=headers)
     try:
@@ -50,14 +117,13 @@ def fetch_repo_dashboard(owner, repo):
             data = resp.read().decode("utf-8")
             return json.loads(data)
     except Exception as e:
-        # Return structured fallback / local synced state if web endpoint requires active OAuth Cookie
         return {
             "owner": owner,
             "repo": repo,
             "status": "COOKIE_REQUIRED",
             "message": "Export browser cookie to ~/.config/jules/cookies.txt or set JULES_DASHBOARD_COOKIE to enable full live RPC mutation.",
             "knowledge": [],
-            "suggestions": [],
+            "suggestions": fetch_jules_suggestions(),
             "ci_fixer": {"enabled": True},
             "environment": {"enabled": True}
         }
@@ -103,15 +169,21 @@ def update_repo_setting(owner, repo, setting_type, data):
 
 def main():
     parser = argparse.ArgumentParser(description="Jules Web Dashboard Scraper & RPC Client")
-    parser.add_argument("command", choices=["fetch", "update"], help="Action to perform")
-    parser.add_argument("--repo", required=True, help="Repository in 'owner/repo' format")
+    parser.add_argument("command", choices=["fetch", "update", "fetch-suggestions"], help="Action to perform")
+    parser.add_argument("--repo", help="Repository in 'owner/repo' format")
     parser.add_argument("--setting", choices=["knowledge", "environment", "suggestions", "ci_fixer"], help="Setting to update")
     parser.add_argument("--value", help="JSON string or file path containing new setting value")
 
     args = parser.parse_args()
-    parts = args.repo.split("/")
-    if len(parts) != 2:
+
+    if args.command == "fetch-suggestions":
+        sugs = fetch_jules_suggestions()
+        print(json.dumps(sugs, indent=2))
+        return
+
+    if not args.repo or "/" not in args.repo:
         print("Error: --repo must be in 'owner/repo' format", file=sys.stderr)
+        sys.exit(1)
         sys.exit(1)
         
     owner, repo = parts[0], parts[1]
