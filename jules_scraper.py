@@ -364,6 +364,56 @@ def update_repo_setting(owner, repo, setting_type, data):
             "note": "Updated locally and queued for web RPC push once session cookies are authenticated."
         }
 
+def fetch_scheduled_tasks(owner=None, repo=None):
+    """
+    Fetches scheduled tasks for connected repositories or a specific owner/repo.
+    """
+    headers = get_headers()
+    tasks = []
+    if owner and repo:
+        url = f"https://jules.google.com/api/repo/{owner}/{repo}/scheduled_tasks"
+        try:
+            req = urllib.request.Request(url, headers=headers)
+            with urllib.request.urlopen(req, timeout=8) as resp:
+                res = json.loads(resp.read().decode("utf-8"))
+                if isinstance(res, list):
+                    return res
+                elif isinstance(res, dict) and "tasks" in res:
+                    return res["tasks"]
+        except Exception:
+            pass
+
+    # Read from persistent config cache if web RPC unauthenticated
+    if os.path.exists(CONFIG_FILE):
+        try:
+            with open(CONFIG_FILE, "r") as f:
+                cfg_data = json.load(f)
+                for repo_key, data in cfg_data.items():
+                    s_tasks = data.get("scheduled_tasks", [])
+                    if isinstance(s_tasks, list):
+                        for st in s_tasks:
+                            if isinstance(st, dict):
+                                st["repo"] = repo_key
+                                tasks.append(st)
+        except Exception:
+            pass
+    return tasks
+
+def create_scheduled_task(owner, repo, title, prompt, schedule="0 0 * * 1", branch="main"):
+    """
+    Creates or updates a scheduled task for a target repository.
+    @param schedule: Cron format or descriptor string (e.g. '0 0 * * 1' for weekly)
+    """
+    task_data = {
+        "title": title,
+        "prompt": prompt,
+        "schedule": schedule,
+        "branch": branch,
+        "enabled": True,
+        "created_at": time.strftime("%Y-%m-%d %H:%M:%S")
+    }
+    return update_repo_setting(owner, repo, "scheduled_tasks", task_data)
+
 def main():
     parser = argparse.ArgumentParser(description="Jules Web Dashboard Scraper & RPC Client")
     parser.add_argument("command", choices=["fetch", "update", "fetch-suggestions"], help="Action to perform")

@@ -542,7 +542,7 @@ def draw_menu(stdscr):
             bg_fetch()
 
         # Multi-line footer keybindings bar wrapping calculation
-        full_tips = f"Keybindings: [s]\u00A0{'stop' if svc_active else 'start'}\u00A0service | [u]\u00A0unstuck\u00A0session | [g]\u00A0suggestions | [o]\u00A0AGY\u00A0mode | [d]\u00A0AGY\u00A0perms | [b]\u00A0autostart | [p]\u00A0open\u00A0PR | [w]\u00A0Jules\u00A0web\u00A0UI | [h]\u00A0history\u00A0log | [v]\u00A0archived\u00A0collection | [q]\u00A0quit"
+        full_tips = f"Keybindings: [s]\u00A0{'stop' if svc_active else 'start'}\u00A0service | [u]\u00A0unstuck\u00A0session | [g]\u00A0suggestions | [t]\u00A0scheduled\u00A0tasks | [o]\u00A0AGY\u00A0mode | [d]\u00A0AGY\u00A0perms | [b]\u00A0autostart | [p]\u00A0open\u00A0PR | [w]\u00A0Jules\u00A0web\u00A0UI | [h]\u00A0history\u00A0log | [v]\u00A0archived\u00A0collection | [q]\u00A0quit"
         raw_footer_lines = textwrap.wrap(full_tips, max(20, width - 4)) or [full_tips]
         footer_lines = [l.strip().lstrip("|").rstrip("|").strip() for l in raw_footer_lines]
         footer_height = len(footer_lines)
@@ -824,6 +824,8 @@ def draw_menu(stdscr):
             action_msg = prompt_action_history_panel(stdscr)
         elif key in (ord('g'), ord('G')):
             action_msg = prompt_suggestions_panel(stdscr, preloaded_suggestions=suggestions_cache)
+        elif key in (ord('t'), ord('T')):
+            action_msg = prompt_scheduled_panel(stdscr)
         elif key in (ord('v'), ord('V')):
             action_msg = prompt_archived_panel(stdscr, preloaded_archived=archived_sessions_cache)
         elif key in (ord('u'), ord('U')) and sessions_cache:
@@ -1956,6 +1958,90 @@ def prompt_archived_panel(stdscr, preloaded_archived=None):
 #     return "Cancelled Knowledge input (format repo:rule required)."
 
 import textwrap
+
+def prompt_scheduled_panel(stdscr):
+    """Displays a dedicated full-screen Scheduled Tasks panel (listing recurring background maintenance tasks)."""
+    stdscr.timeout(-1)
+    selected_idx = 0
+    scroll_top = 0
+    status_msg = ""
+
+    from jules_scraper import fetch_scheduled_tasks, create_scheduled_task
+    tasks = fetch_scheduled_tasks()
+
+    while True:
+        height, width = stdscr.getmaxyx()
+        stdscr.clear()
+
+        header = " 🕒 JULES NATIVE SCHEDULED TASKS "
+        stdscr.attron(curses.color_pair(5) | curses.A_BOLD)
+        stdscr.addstr(0, 0, header[:width].center(width))
+        stdscr.attroff(curses.color_pair(5) | curses.A_BOLD)
+
+        footer_tips = "Keybindings: [c] create scheduled task | [r] refresh | [ESC] return to active sessions"
+        stdscr.attron(curses.color_pair(1))
+        stdscr.addstr(height - 1, 0, footer_tips.center(width)[:width-1])
+        stdscr.attroff(curses.color_pair(1))
+
+        if status_msg:
+            stdscr.attron(curses.color_pair(3) | curses.A_BOLD)
+            stdscr.addstr(height - 2, 2, status_msg[:width-4])
+            stdscr.attroff(curses.color_pair(3) | curses.A_BOLD)
+
+        max_y = height - 3 - (1 if status_msg else 0)
+        curr_y = 2
+
+        if not tasks:
+            stdscr.addstr(3, 2, "No scheduled tasks found.", curses.color_pair(3))
+            stdscr.addstr(5, 2, "Press [c] to configure a new recurring scheduled task.", curses.color_pair(1))
+        else:
+            selected_idx = max(0, min(selected_idx, len(tasks) - 1))
+            if selected_idx < scroll_top:
+                scroll_top = selected_idx
+
+            for i in range(scroll_top, len(tasks)):
+                if curr_y >= max_y:
+                    break
+
+                t_item = tasks[i]
+                t_title = t_item.get("title") or t_item.get("prompt", "Scheduled Task")
+                t_sched = t_item.get("schedule", "0 0 * * 1")
+                t_repo = t_item.get("repo", "Repository")
+                t_status = "ENABLED 🟢" if t_item.get("enabled", True) else "DISABLED 🔴"
+
+                prefix = ">" if i == selected_idx else " "
+                line_str = f"{prefix} [#{i+1}] {t_repo} | {t_sched} | {t_status} | {t_title}"[:width-2]
+
+                if i == selected_idx:
+                    stdscr.attron(curses.color_pair(5) | curses.A_BOLD)
+                    stdscr.addstr(curr_y, 1, line_str)
+                    stdscr.attroff(curses.color_pair(5) | curses.A_BOLD)
+                else:
+                    stdscr.attron(curses.color_pair(1))
+                    stdscr.addstr(curr_y, 1, line_str)
+                    stdscr.attroff(curses.color_pair(1))
+                curr_y += 1
+
+        stdscr.refresh()
+        ch = _get_key_with_mouse_wheel(stdscr)
+
+        if ch == curses.KEY_RESIZE:
+            curses.update_lines_cols()
+            continue
+        elif ch in (27, ord('q'), ord('Q')):
+            return "Exited Scheduled Tasks panel."
+        elif ch in (curses.KEY_UP, ord('k')) and selected_idx > 0:
+            selected_idx -= 1
+        elif ch in (curses.KEY_DOWN, ord('j')) and tasks and selected_idx < len(tasks) - 1:
+            selected_idx += 1
+        elif ch in (ord('r'), ord('R')):
+            tasks = fetch_scheduled_tasks()
+            status_msg = "Refreshed scheduled tasks list."
+        elif ch in (ord('c'), ord('C')):
+            if prompt_confirm(stdscr, "Create weekly maintenance task for paru-wrapper?"):
+                create_scheduled_task("Vikyek", "paru-wrapper", "Weekly Dependency & Health Scan", "Run syntax verification, update dependencies, and open PR", schedule="0 0 * * 1")
+                tasks = fetch_scheduled_tasks()
+                status_msg = "Created scheduled task for Vikyek/paru-wrapper."
 
 def prompt_reply(stdscr, session_id, local_num, preloaded_data=None):
     # Use preloaded details if available, otherwise fetch ONCE
