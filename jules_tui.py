@@ -783,8 +783,27 @@ def prompt_confirm(stdscr, question):
 
 # Persistent Task Queue & Status Dictionary (Max 2 concurrent AGY processes)
 import queue
+STATUS_PERSIST_FILE = os.path.expanduser("~/.config/jules/agy_task_status.json")
+
+def load_agy_task_statuses():
+    if os.path.exists(STATUS_PERSIST_FILE):
+        try:
+            with open(STATUS_PERSIST_FILE, "r") as f:
+                return json.load(f)
+        except Exception:
+            pass
+    return {}
+
+def save_agy_task_statuses(statuses):
+    try:
+        os.makedirs(os.path.dirname(STATUS_PERSIST_FILE), exist_ok=True)
+        with open(STATUS_PERSIST_FILE, "w") as f:
+            json.dump(statuses, f, indent=2)
+    except Exception:
+        pass
+
 task_queue = queue.Queue()
-agy_task_status = {}
+agy_task_status = load_agy_task_statuses()
 MAX_CONCURRENT_AGY = 2
 
 def agy_worker():
@@ -800,6 +819,7 @@ def agy_worker():
 
         if task_type == "VERIFY":
             agy_task_status[title] = "VERIFYING"
+            save_agy_task_statuses(agy_task_status)
             try:
                 import shlex
                 cmd_args = ["/usr/sbin/agy"] + shlex.split(flg) + ["-p", prompt]
@@ -813,8 +833,10 @@ def agy_worker():
                     agy_task_status[title] = "INCOMPLETE ℹ️"
             except Exception as e:
                 agy_task_status[title] = f"ERROR 🚨 ({e})"
+            save_agy_task_statuses(agy_task_status)
         else:
             agy_task_status[title] = "RUNNING"
+            save_agy_task_statuses(agy_task_status)
             try:
                 import shlex
                 cmd_args = ["/usr/sbin/agy"] + shlex.split(flg) + ["-p", prompt]
@@ -829,6 +851,7 @@ def agy_worker():
                     agy_task_status[title] = f"FAILED ✖ ({err_reason})"
             except Exception as e:
                 agy_task_status[title] = f"ERROR 🚨 ({e})"
+            save_agy_task_statuses(agy_task_status)
 
         task_queue.task_done()
 
@@ -1076,6 +1099,7 @@ def prompt_suggestions_panel(stdscr):
                     flags += " --dangerously-skip-permissions"
 
                 agy_task_status[task_title] = "QUEUED ⏳"
+                save_agy_task_statuses(agy_task_status)
                 task_queue.put(("EXEC", task_title, prompt_str, flags, repo_name))
 
             status_msg = f"🚀 Queued AGY ({agy_mode}) for {len(valid_sugs)} selected suggestion(s) (Max 2 concurrent)!"
@@ -1112,6 +1136,7 @@ def prompt_suggestions_panel(stdscr):
                     flags += " --dangerously-skip-permissions"
 
                 agy_task_status[task_title] = "QUEUED ⏳"
+                save_agy_task_statuses(agy_task_status)
                 task_queue.put(("VERIFY", task_title, check_prompt, flags, repo_name))
 
             status_msg = f"🔍 Queued AGY verification for {len(valid_sugs)} selected suggestion(s)!"
@@ -1148,6 +1173,7 @@ def prompt_suggestions_panel(stdscr):
                         flgs += " --dangerously-skip-permissions"
 
                     agy_task_status[t_title] = "QUEUED ⏳"
+                    save_agy_task_statuses(agy_task_status)
                     task_queue.put(("EXEC", t_title, p_str, flgs, r_name))
 
                 status_msg = f"🚀 Queued batch execution for {len(active_sugs)} suggestions (Max 2 concurrent)!"
