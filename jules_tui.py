@@ -172,7 +172,7 @@ def draw_menu(stdscr):
                     display_state = f"{state} ⚠️"
                 elif "IN_PROGRESS" in state or "RUNNING" in state:
                     color = curses.color_pair(1) | curses.A_BOLD
-                    display_state = f"{state} {swirl_icon} {braille_icon}"
+                    display_state = f"{state} {braille_icon}"
                 else:
                     color = curses.color_pair(1)
                     display_state = state
