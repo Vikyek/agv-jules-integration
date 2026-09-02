@@ -62,7 +62,7 @@ def check_session_stuck_or_plan_loop(session_id, preloaded_activities=None):
         if plan_count >= 2:
             return True, f"PLAN_LOOP 🔄 ({plan_count} plans)"
         if patch_fail_count >= 2:
-            return True, "STUCK_PATCH_LOOP ⚠️"
+            return True, "STUCK_PATCH ⚠️"
     except Exception:
         pass
     return False, ""
@@ -461,11 +461,11 @@ def draw_menu(stdscr):
                 prefix = ">" if i == selected_idx else " "
 
                 if width < 80:
-                    short_state = display_state.replace("AWAITING_USER_FEEDBACK", "FEEDBACK").replace("IN_PROGRESS", "RUNNING")
-                    meta_prefix = f"{prefix} [#{local_num}] {short_state[:12]} | "
+                    short_state = display_state.replace("AWAITING_USER_FEEDBACK", "FEEDBACK").replace("IN_PROGRESS", "RUNNING").replace("STUCK_PATCH", "STUCK").replace("UNASSIGNED_PR", "PR_UNASSIGNED")
+                    meta_prefix = f"{prefix} [#{local_num}] {short_state[:14]} | "
                 elif width < 120:
                     short_state = display_state.replace("AWAITING_USER_FEEDBACK", "FEEDBACK")
-                    meta_prefix = f"{prefix} [#{local_num:<2}] {short_state:<18} | "
+                    meta_prefix = f"{prefix} [#{local_num:<2}] {short_state:<20} | "
                 else:
                     meta_prefix = f"{prefix} [#{local_num:<2}] {display_state:<28} | "
 
