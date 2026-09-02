@@ -848,9 +848,10 @@ def agy_worker():
                 res = subprocess.run(cmd_args, cwd=target_cwd, capture_output=True, text=True)
                 if "SUCCESS" in res.stdout.upper():
                     from jules_scraper import dismiss_suggestion
+                    from jules_manager import log_action
                     dismiss_suggestion(title)
                     agy_task_status[title] = "VERIFIED DONE ✅"
-                    log_action_event(title, r_name, "main", "AGY_VERIFICATION_CHECK")
+                    log_action(title, "AGY_VERIFICATION_CHECK", f"Verified recommendation in {r_name}", title=title, repo=r_name, branch="main", action_by="auto")
                 else:
                     agy_task_status[title] = "INCOMPLETE ℹ️"
             except Exception as e:
@@ -865,9 +866,10 @@ def agy_worker():
                 res = subprocess.run(cmd_args, cwd=target_cwd, capture_output=True, text=True)
                 if res.returncode == 0:
                     from jules_scraper import dismiss_suggestion
+                    from jules_manager import log_action
                     dismiss_suggestion(title)
                     agy_task_status[title] = "COMPLETED ✅"
-                    log_action_event(title, r_name, "main", "AGY_SUGGESTION_RUN")
+                    log_action(title, "AGY_SUGGESTION_RUN", f"Executed suggestion task in {r_name}", title=title, repo=r_name, branch="main", action_by="auto")
                 else:
                     err_reason = res.stderr.strip() or res.stdout.strip()[-60:] or f"code {res.returncode}"
                     agy_task_status[title] = f"FAILED ✖ ({err_reason})"
