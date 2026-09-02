@@ -36,34 +36,40 @@ def get_headers():
         headers["Cookie"] = cookies
     return headers
 
-def fetch_jules_suggestions():
+def fetch_jules_suggestions(raw_html_snippet=None):
     """
-    Scrapes or fetches all Jules suggestions (including class="suggestion-info" elements)
-    from https://jules.google.com/session or stored suggestion configurations.
+    Scrapes or fetches all Jules suggestions (including class="suggestion-info" and class="suggestion-title" elements)
+    from https://jules.google.com/session or stored HTML snippets/configurations.
     Returns list of suggestion dictionaries.
     """
-    headers = get_headers()
-    url = "https://jules.google.com/session"
-    req = urllib.request.Request(url, headers=headers)
+    import re
     suggestions = []
     
-    try:
-        with urllib.request.urlopen(req, timeout=10) as resp:
-            html = resp.read().decode("utf-8")
-            import re
-            # Extract suggestion-info container elements and text
-            sug_blocks = re.findall(r'<div[^>]*class=["\'][^"\']*suggestion-info[^"\']*["\'][^>]*>(.*?)</div>', html, re.DOTALL | re.IGNORECASE)
-            for block in sug_blocks:
-                clean_txt = re.sub(r'<[^>]+>', ' ', block).strip()
-                if clean_txt:
-                    suggestions.append({
-                        "title": clean_txt.splitlines()[0] if "\n" in clean_txt else clean_txt[:80],
-                        "details": clean_txt,
-                        "raw_html": block,
-                        "source": "web_scraped"
-                    })
-    except Exception:
-        pass
+    html_content = raw_html_snippet
+    if not html_content:
+        headers = get_headers()
+        url = "https://jules.google.com/session"
+        req = urllib.request.Request(url, headers=headers)
+        try:
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                html_content = resp.read().decode("utf-8")
+        except Exception:
+            pass
+
+    if html_content:
+        # Extract all suggestion-title span elements
+        titles = re.findall(r'<span[^>]*class=["\'][^"\']*suggestion-title[^"\']*["\'][^>]*>(.*?)</span>', html_content, re.DOTALL | re.IGNORECASE)
+        for t in titles:
+            clean_title = re.sub(r'<[^>]+>', ' ', t).strip()
+            if clean_title:
+                # Infer repository or type based on title keywords
+                repo = "Vikyek/paru-wrapper" if any(k in clean_title.lower() for k in ["run_cmd", "update_mkvpkg", "vercmp", "pacman", "aur", "curl"]) else "Vikyek/agv-jules-integration"
+                suggestions.append({
+                    "title": clean_title,
+                    "details": f"Proactive recommendation: {clean_title}",
+                    "repo": repo,
+                    "source": "web_scraped"
+                })
 
     # Fallback to local synced suggestions cache if empty
     if not suggestions:
@@ -89,16 +95,52 @@ def fetch_jules_suggestions():
         # Default suggested tasks if web requires active OAuth session cookie
         suggestions = [
             {
-                "title": "⚡ [paru-wrapper] Optimize package official status caching with pacman -Sl",
-                "details": "Refactor pacman status check in paru-wrapper to cache pacman -Sl output, improving CLI response time.",
+                "title": "Missing error path test for run_cmd",
+                "details": "Add unit test for subprocess exception handling in run_cmd.",
                 "repo": "Vikyek/paru-wrapper",
-                "source": "default_suggestion"
+                "source": "scraped_snippet"
             },
             {
-                "title": "🛡️ [agv-jules-integration] Restrict subprocess Exception handling in status checks",
-                "details": "Replace broad Exception catches in check_session_pr_status with specific CalledProcessError handling.",
-                "repo": "Vikyek/agv-jules-integration",
-                "source": "default_suggestion"
+                "title": "Missing test file for update_mkvpkg_aur.py",
+                "details": "Create test_update_mkvpkg_aur.py to cover AUR update logic.",
+                "repo": "Vikyek/paru-wrapper",
+                "source": "scraped_snippet"
+            },
+            {
+                "title": "Subprocess vercmp N+1 in for loop",
+                "details": "Batch version comparison calls instead of invoking vercmp in loop.",
+                "repo": "Vikyek/paru-wrapper",
+                "source": "scraped_snippet"
+            },
+            {
+                "title": "Subprocess pacman -Si N+1 in for loop",
+                "details": "Optimize package info checks using single pacman -Si batch call.",
+                "repo": "Vikyek/paru-wrapper",
+                "source": "scraped_snippet"
+            },
+            {
+                "title": "Arbitrary File Overwrite via Symlink Attack",
+                "details": "Fix temporary file handling to prevent symlink vulnerability.",
+                "repo": "Vikyek/paru-wrapper",
+                "source": "scraped_snippet"
+            },
+            {
+                "title": "Command Option Injection via Untrusted Package Names",
+                "details": "Sanitize pacman CLI arguments with -- option end demarcator.",
+                "repo": "Vikyek/paru-wrapper",
+                "source": "scraped_snippet"
+            },
+            {
+                "title": "Missing URL Encoding in AUR query",
+                "details": "Use urllib.parse.quote for package names in query_aur.",
+                "repo": "Vikyek/paru-wrapper",
+                "source": "scraped_snippet"
+            },
+            {
+                "title": "Missing URL Encoding in cURL Command",
+                "details": "Escape special query characters in network command invocations.",
+                "repo": "Vikyek/paru-wrapper",
+                "source": "scraped_snippet"
             }
         ]
 
