@@ -30,7 +30,7 @@ import threading
 import textwrap
 from jules_manager import list_sessions, get_session_activities, send_message, archive_session, _make_request
 
-CONFIG_FILE = os.path.expanduser("~/.config/jules/config.json")
+CONFIG_FILE = os.path.expanduser("~/.config/jules-vanager/config.json")
 
 def load_config():
     default_cfg = {
@@ -63,7 +63,7 @@ def load_agy_actions_cached():
     if now - _AGY_ACTIONS_CACHE_TIME < 1.5:
         return _AGY_ACTIONS_CACHE
     try:
-        log_file = os.path.expanduser("~/.config/jules/agy_actions.json")
+        log_file = os.path.expanduser("~/.config/jules-vanager/agy_actions.json")
         if os.path.exists(log_file):
             with open(log_file, "r") as f:
                 _AGY_ACTIONS_CACHE = json.load(f)
@@ -353,7 +353,7 @@ def draw_menu(stdscr):
         except Exception:
             pass
 
-    SESSIONS_CACHE_FILE = os.path.expanduser("~/.config/jules/sessions_cache.json")
+    SESSIONS_CACHE_FILE = os.path.expanduser("~/.config/jules-vanager/sessions_cache.json")
 
     def load_cached_sessions():
         if os.path.exists(SESSIONS_CACHE_FILE) and os.path.getsize(SESSIONS_CACHE_FILE) > 0:
@@ -923,7 +923,7 @@ def prompt_confirm(stdscr, question):
 
 # Persistent Task Queue & Status Dictionary (Max 2 concurrent AGY processes)
 import queue
-STATUS_PERSIST_FILE = os.path.expanduser("~/.config/jules/agy_task_status.json")
+STATUS_PERSIST_FILE = os.path.expanduser("~/.config/jules-vanager/agy_task_status.json")
 
 def load_agy_task_statuses():
     if os.path.exists(STATUS_PERSIST_FILE):
@@ -1053,7 +1053,7 @@ def prompt_suggestion_details_panel(stdscr, sug, agy_status=""):
     # Load recorded action events / thought process logs for this recommendation title
     action_history = []
     try:
-        log_file = os.path.expanduser("~/.config/jules/agy_actions.json")
+        log_file = os.path.expanduser("~/.config/jules-vanager/agy_actions.json")
         if os.path.exists(log_file) and os.path.getsize(log_file) > 0:
             with open(log_file, "r") as f:
                 all_actions = json.load(f)
@@ -1641,7 +1641,7 @@ def prompt_action_history_panel(stdscr, filter_suggestions_only=False):
         # Read global action logs
         log_entries = []
         try:
-            log_file = os.path.expanduser("~/.config/jules/agy_actions.json")
+            log_file = os.path.expanduser("~/.config/jules-vanager/agy_actions.json")
             if os.path.exists(log_file):
                 with open(log_file, "r") as f:
                     all_actions = json.load(f)
@@ -1789,7 +1789,7 @@ def prompt_archived_suggestions_panel(stdscr):
             title_to_restore = dismissed_set[selected_idx]
             if prompt_confirm(stdscr, f"Restore suggestion '{title_to_restore}'?"):
                 try:
-                    dismiss_file = os.path.expanduser("~/.config/jules/dismissed_suggestions.json")
+                    dismiss_file = os.path.expanduser("~/.config/jules-vanager/dismissed_suggestions.json")
                     if os.path.exists(dismiss_file):
                         with open(dismiss_file, "r") as f:
                             items = json.load(f)
@@ -1811,7 +1811,7 @@ def prompt_archived_panel(stdscr, preloaded_archived=None):
     # Load persistent action log to check manual vs auto archiving tags
     auto_archived_ids = set()
     try:
-        log_file = os.path.expanduser("~/.config/jules/agy_actions.json")
+        log_file = os.path.expanduser("~/.config/jules-vanager/agy_actions.json")
         if os.path.exists(log_file):
             with open(log_file, "r") as f:
                 all_actions = json.load(f)
@@ -1969,7 +1969,7 @@ def prompt_reply(stdscr, session_id, local_num, preloaded_data=None):
     # Read persistent AGY action log for this session
     agy_logs = []
     try:
-        log_file = os.path.expanduser("~/.config/jules/agy_actions.json")
+        log_file = os.path.expanduser("~/.config/jules-vanager/agy_actions.json")
         if os.path.exists(log_file):
             with open(log_file, "r") as f:
                 all_actions = json.load(f)
@@ -2156,7 +2156,7 @@ def main():
     if not args.no_kill:
         kill_previous_tui_instances()
 
-    log_path = os.path.expanduser("~/.config/jules/tui_debug.log")
+    log_path = os.path.expanduser("~/.config/jules-vanager/tui_debug.log")
     os.makedirs(os.path.dirname(log_path), exist_ok=True)
     with open(log_path, "a") as logf:
         logf.write(f"\n--- Starting TUI session (PID: {os.getpid()}) at {time.strftime('%Y-%m-%d %H:%M:%S')} ---\n")

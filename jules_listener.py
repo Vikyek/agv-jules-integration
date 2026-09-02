@@ -16,17 +16,17 @@ from jules_manager import list_sessions, get_session_activities, send_message, a
 
 HOME_DIR = os.path.expanduser("~")
 PROJECTS_DIR = os.path.join(HOME_DIR, "Projects")
-STATUS_FILE = os.path.expanduser("~/.config/jules/status.json")
+STATUS_FILE = os.path.expanduser("~/.config/jules-vanager/status.json")
 
 def save_status(data):
-    """Writes real-time status data to ~/.config/jules/status.json for HUD consumption."""
+    """Writes real-time status data to ~/.config/jules-vanager/status.json for HUD consumption."""
     os.makedirs(os.path.dirname(STATUS_FILE), exist_ok=True)
     with open(STATUS_FILE, "w") as f:
         json.dump(data, f, indent=2)
 
 def load_config_mode():
-    """Reads execution mode from ~/.config/jules/config.json (once, continuous, paused)."""
-    cfg_file = os.path.expanduser("~/.config/jules/config.json")
+    """Reads execution mode from ~/.config/jules-vanager/config.json (once, continuous, paused)."""
+    cfg_file = os.path.expanduser("~/.config/jules-vanager/config.json")
     if os.path.exists(cfg_file):
         try:
             with open(cfg_file, "r") as f:
@@ -79,7 +79,7 @@ def check_jules_api_queries():
     # Read persistent action logs to evaluate UNSTUCK_PROMPT timestamps
     actions_log = {}
     try:
-        log_file = os.path.expanduser("~/.config/jules/agy_actions.json")
+        log_file = os.path.expanduser("~/.config/jules-vanager/agy_actions.json")
         if os.path.exists(log_file):
             with open(log_file, "r") as f:
                 actions_log = json.load(f)

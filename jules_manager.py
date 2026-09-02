@@ -105,7 +105,7 @@ def send_message(session_id, message_text):
 def log_action(session_id, action_type, message, title="", repo="", branch="", action_by="manual", query=""):
     """Persistently records an action event (query reply, PR merge, branch deletion, archive event) with title, repo, branch metadata."""
     try:
-        log_file = os.path.expanduser("~/.config/jules/agy_actions.json")
+        log_file = os.path.expanduser("~/.config/jules-vanager/agy_actions.json")
         os.makedirs(os.path.dirname(log_file), exist_ok=True)
         actions = {}
         if os.path.exists(log_file) and os.path.getsize(log_file) > 0:

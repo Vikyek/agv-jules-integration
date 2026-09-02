@@ -13,8 +13,8 @@ import urllib.parse
 import argparse
 
 HOME_DIR = os.path.expanduser("~")
-COOKIE_FILE = os.path.expanduser("~/.config/jules/cookies.txt")
-CONFIG_FILE = os.path.expanduser("~/.config/jules/dashboard_config.json")
+COOKIE_FILE = os.path.expanduser("~/.config/jules-vanager/cookies.txt")
+CONFIG_FILE = os.path.expanduser("~/.config/jules-vanager/dashboard_config.json")
 
 def load_cookies():
     """Loads session cookies if available."""
@@ -36,8 +36,8 @@ def get_headers():
         headers["Cookie"] = cookies
     return headers
 
-DISMISSED_FILE = os.path.expanduser("~/.config/jules/dismissed_suggestions.json")
-SCANNED_SUGGESTIONS_FILE = os.path.expanduser("~/.config/jules/scanned_suggestions.json")
+DISMISSED_FILE = os.path.expanduser("~/.config/jules-vanager/dismissed_suggestions.json")
+SCANNED_SUGGESTIONS_FILE = os.path.expanduser("~/.config/jules-vanager/scanned_suggestions.json")
 
 def load_dismissed_suggestions():
     if os.path.exists(DISMISSED_FILE):
@@ -210,7 +210,7 @@ def fetch_jules_suggestions(raw_html_snippet=None, filter_dismissed=True):
 
     # Fallback to local synced suggestions cache if empty
     if not suggestions:
-        config_path = os.path.expanduser("~/.config/jules/dashboard_config.json")
+        config_path = os.path.expanduser("~/.config/jules-vanager/dashboard_config.json")
         if os.path.exists(config_path):
             try:
                 with open(config_path, "r") as f:
@@ -318,7 +318,7 @@ def fetch_repo_dashboard(owner, repo):
             "owner": owner,
             "repo": repo,
             "status": "COOKIE_REQUIRED",
-            "message": "Export browser cookie to ~/.config/jules/cookies.txt or set JULES_DASHBOARD_COOKIE to enable full live RPC mutation.",
+            "message": "Export browser cookie to ~/.config/jules-vanager/cookies.txt or set JULES_DASHBOARD_COOKIE to enable full live RPC mutation.",
             "knowledge": [],
             "suggestions": fetch_jules_suggestions(),
             "ci_fixer": {"enabled": True},

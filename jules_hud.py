@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Jules Conky / Status Bar HUD Display (jules_hud.py)
-Reads ~/.config/jules/status.json and outputs formatted status metrics.
+Reads ~/.config/jules-vanager/status.json and outputs formatted status metrics.
 Supports raw text (for vlfstatus / i3bar), ANSI colorized output, or continuous streaming mode.
 """
 
@@ -11,7 +11,7 @@ import json
 import time
 import argparse
 
-STATUS_FILE = os.path.expanduser("~/.config/jules/status.json")
+STATUS_FILE = os.path.expanduser("~/.config/jules-vanager/status.json")
 
 def load_status():
     if os.path.exists(STATUS_FILE):

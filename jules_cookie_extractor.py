@@ -2,7 +2,7 @@
 """
 Automated Cookie Extractor & Session Manager for Jules Dashboard (jules_cookie_extractor.py)
 Extracts session cookies for jules.google.com from local browser profile databases (Chrome/Chromium/Brave/Firefox)
-and saves them to ~/.config/jules/cookies.txt for automatic Web RPC authentication.
+and saves them to ~/.config/jules-vanager/cookies.txt for automatic Web RPC authentication.
 """
 
 import os
@@ -13,7 +13,7 @@ import shutil
 import tempfile
 
 HOME_DIR = os.path.expanduser("~")
-COOKIE_FILE = os.path.expanduser("~/.config/jules/cookies.txt")
+COOKIE_FILE = os.path.expanduser("~/.config/jules-vanager/cookies.txt")
 
 CHROME_COOKIE_PATH = os.path.join(HOME_DIR, ".config/google-chrome/Default/Cookies")
 BRAVE_COOKIE_PATH = os.path.join(HOME_DIR, ".config/BraveSoftware/Brave-Browser/Default/Cookies")
