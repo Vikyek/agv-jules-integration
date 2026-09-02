@@ -29,6 +29,48 @@ def save_config(cfg):
     with open(CONFIG_FILE, "w") as f:
         json.dump(cfg, f, indent=2)
 
+def open_session_pr(session):
+    """Looks up and opens the GitHub PR associated with the task/session if created."""
+    if not session:
+        return "No session selected."
+
+    sid = session.get("id") or session.get("name", "").split("/")[-1]
+    src_ctx = session.get("sourceContext", {})
+    rep_name = src_ctx.get("source", "").replace("sources/github/", "").replace("sources/", "")
+    
+    if not rep_name:
+        rep_name = "paru-wrapper"
+
+    projects_dir = os.path.expanduser("~/Projects")
+    repo_path = os.path.join(projects_dir, os.path.basename(rep_name))
+
+    if not os.path.exists(os.path.join(repo_path, ".git")):
+        return f"Local repo path not found: {repo_path}"
+
+    try:
+        res = subprocess.run(["gh", "pr", "list", "--state", "all", "--json", "number,title,headRefName,url"], cwd=repo_path, capture_output=True, text=True)
+        if res.returncode == 0:
+            prs = json.loads(res.stdout)
+            matching_pr = None
+            for pr in prs:
+                branch = pr.get("headRefName", "")
+                title = pr.get("title", "")
+                if sid in branch or sid in title or branch.endswith(sid):
+                    matching_pr = pr
+                    break
+
+            if matching_pr:
+                pr_url = matching_pr.get("url")
+                import webbrowser
+                webbrowser.open(pr_url)
+                return f"🔗 Opened GitHub PR #{matching_pr.get('number')}: {pr_url}"
+            else:
+                return f"⚠️ No PR created yet for session {sid[:8]}..."
+    except Exception as e:
+        return f"Error checking PR: {e}"
+
+    return f"⚠️ PR not created yet for session {sid[:8]}..."
+
 def draw_menu(stdscr):
     try:
         curses.curs_set(0)
@@ -127,9 +169,9 @@ def draw_menu(stdscr):
 
         # Multi-line footer keybindings bar wrapping calculation
         if width < 80:
-            raw_tips = f"[s] {'stop' if svc_active else 'start'} | [b] auto | [w] web | [h] action history | [v] archived | [q] quit"
+            raw_tips = f"[s] {'stop' if svc_active else 'start'} | [b] auto | [p] open PR | [w] web | [h] history | [v] archived | [q] quit"
         else:
-            raw_tips = f"Keybindings: [s] {'stop' if svc_active else 'start'} service | [b] autostart | [w] open Jules web | [h] action history log | [v] archived collection | [q] quit"
+            raw_tips = f"Keybindings: [s] {'stop' if svc_active else 'start'} service | [b] autostart | [p] open PR | [w] open Jules web | [h] history log | [v] archived collection | [q] quit"
 
         footer_lines = textwrap.wrap(raw_tips, max(20, width - 4)) or [raw_tips]
         footer_height = len(footer_lines)
@@ -302,12 +344,16 @@ def draw_menu(stdscr):
                 action_msg = f"Archived session #{selected_idx + 1}"
             else:
                 action_msg = "Cancelled archiving session."
+        elif key in (ord('p'), ord('P')) and sessions_cache:
+            curr_s = sessions_cache[selected_idx]
+            action_msg = open_session_pr(curr_s)
         elif key in (curses.KEY_ENTER, 10, 13) and sessions_cache:
             curr_s = sessions_cache[selected_idx]
             sid = curr_s.get("id") or curr_s.get("name", "").split("/")[-1]
             pre_data = details_cache.get(sid)
             action_msg = prompt_reply(stdscr, sid, selected_idx + 1, preloaded_data=pre_data)
             last_fetch = 0
+
 def toggle_systemd_service():
     check = subprocess.run(["systemctl", "--user", "is-active", "jules-listener.service"], capture_output=True, text=True)
     is_active = check.stdout.strip() == "active"
@@ -712,7 +758,7 @@ def prompt_reply(stdscr, session_id, local_num, preloaded_data=None):
         else:
             prompt_y = max(6, height - 2)
             stdscr.attron(curses.color_pair(1) | curses.A_BOLD)
-            stdscr.addstr(prompt_y, 0, "Press [r] to reply | Press [a] to archive | Press [ESC] to return".center(width)[:width])
+            stdscr.addstr(prompt_y, 0, "Press [r] to reply | Press [p] open PR | Press [a] to archive | Press [ESC] to return".center(width)[:width])
             stdscr.attroff(curses.color_pair(1) | curses.A_BOLD)
 
         if status_err:
@@ -738,6 +784,9 @@ def prompt_reply(stdscr, session_id, local_num, preloaded_data=None):
         elif not reply_active and ch in (ord('r'), ord('R')):
             reply_active = True
             status_err = ""
+            continue
+        elif not reply_active and ch in (ord('p'), ord('P')):
+            status_err = open_session_pr(sess)
             continue
         elif not reply_active and ch in (ord('a'), ord('A')):
             if prompt_confirm(stdscr, f"Archive session #{local_num}?"):
