@@ -380,7 +380,8 @@ def draw_menu(stdscr):
         else:
             raw_tips = f"Keybindings: [s]\u00A0{'stop' if svc_active else 'start'}\u00A0service | [u]\u00A0unstuck\u00A0session | [b]\u00A0autostart | [p]\u00A0open\u00A0PR | [w]\u00A0open\u00A0Jules\u00A0web | [h]\u00A0history\u00A0log | [v]\u00A0archived\u00A0collection | [q]\u00A0quit"
 
-        footer_lines = textwrap.wrap(raw_tips, max(20, width - 4)) or [raw_tips]
+        raw_footer_lines = textwrap.wrap(raw_tips, max(20, width - 4)) or [raw_tips]
+        footer_lines = [l.strip().lstrip("|").rstrip("|").strip() for l in raw_footer_lines]
         footer_height = len(footer_lines)
 
         # Draw active session table
