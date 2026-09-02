@@ -435,9 +435,9 @@ def draw_menu(stdscr):
 
         # Multi-line footer keybindings bar wrapping calculation (using non-breaking spaces \\u00A0 between keybind badge and label)
         if width < 80:
-            raw_tips = f"[s]\u00A0{'stop' if svc_active else 'start'} | [u]\u00A0unstuck | [g]\u00A0sug | [b]\u00A0auto | [p]\u00A0open\u00A0PR | [w]\u00A0web | [h]\u00A0history | [v]\u00A0archived | [q]\u00A0quit"
+            raw_tips = f"[s]\u00A0{'stop' if svc_active else 'start'} | [u]\u00A0unstuck | [g]\u00A0suggestions | [b]\u00A0auto | [p]\u00A0open\u00A0PR | [w]\u00A0Jules\u00A0web\u00A0UI | [h]\u00A0history | [v]\u00A0archived | [q]\u00A0quit"
         else:
-            raw_tips = f"Keybindings: [s]\u00A0{'stop' if svc_active else 'start'}\u00A0service | [u]\u00A0unstuck\u00A0session | [g]\u00A0suggestions | [b]\u00A0autostart | [p]\u00A0open\u00A0PR | [w]\u00A0open\u00A0Jules\u00A0web | [h]\u00A0history\u00A0log | [v]\u00A0archived\u00A0collection | [q]\u00A0quit"
+            raw_tips = f"Keybindings: [s]\u00A0{'stop' if svc_active else 'start'}\u00A0service | [u]\u00A0unstuck\u00A0session | [g]\u00A0suggestions | [b]\u00A0autostart | [p]\u00A0open\u00A0PR | [w]\u00A0Jules\u00A0web\u00A0UI | [h]\u00A0history\u00A0log | [v]\u00A0archived\u00A0collection | [q]\u00A0quit"
 
         raw_footer_lines = textwrap.wrap(raw_tips, max(20, width - 4)) or [raw_tips]
         footer_lines = [l.strip().lstrip("|").rstrip("|").strip() for l in raw_footer_lines]
