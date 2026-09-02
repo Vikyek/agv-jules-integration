@@ -490,20 +490,14 @@ def draw_menu(stdscr):
         if not sessions_cache:
             stdscr.addstr(5, 2, "No active sessions found.", curses.color_pair(3))
         else:
-            # Adjust viewport scroll_top offset to keep selected_idx visible on screen
+            # Keep selected_idx visible within viewport bounds
             if selected_idx < scroll_top:
                 scroll_top = selected_idx
-            elif selected_idx >= scroll_top + available_height:
-                scroll_top = selected_idx - available_height + 1
+
+            max_y_bound = height - footer_height - (1 if action_msg else 0) - 1
 
             for i in range(scroll_top, len(sessions_cache)):
-                if curr_y >= 5 + available_height:
-                    break
-
-                start_y = curr_y
                 s = sessions_cache[i]
-                local_num = i + 1
-                state = s.get("state", "UNKNOWN")
                 raw_title = s.get("title", "")
                 if not raw_title or len(raw_title) > 100 or "\n" in raw_title:
                     title_lines = [l.strip() for l in (raw_title or s.get("prompt", "")).splitlines() if l.strip()]
@@ -516,7 +510,6 @@ def draw_menu(stdscr):
 
                 clean_title = raw_title.lstrip("#").strip().replace("\n", " ")
                 title = clean_title
-
                 pr_st = check_session_pr_status(s)
                 has_pr = pr_st["has_pr"]
                 pr_failed = pr_st["status_checks_failing"]
@@ -528,13 +521,13 @@ def draw_menu(stdscr):
                 is_stuck, stuck_reason = check_session_stuck_or_plan_loop(sid, preloaded_activities=pre_acts)
 
                 if is_stuck:
-                    color = curses.color_pair(6) | curses.A_BOLD  # Red background for plan loop / stuck
+                    color = curses.color_pair(6) | curses.A_BOLD
                     display_state = f"{stuck_reason}"
                 elif s.get("is_unassigned_pr"):
                     color = curses.color_pair(1) | curses.A_BOLD
                     display_state = "UNASSIGNED_PR 🌿"
                 elif pr_failed or pr_issues or pr_conflict:
-                    color = curses.color_pair(6) | curses.A_BOLD  # Highlighted Red background with Black text
+                    color = curses.color_pair(6) | curses.A_BOLD
                     if pr_failed:
                         display_state = "PR_CHECK_FAIL ❌"
                     elif pr_conflict:
@@ -542,7 +535,7 @@ def draw_menu(stdscr):
                     else:
                         display_state = "PR_REVIEW_ISSUE ⚠️"
                 elif "AWAITING" in state:
-                    color = curses.color_pair(6) | curses.A_BOLD  # Highlighted Red background with Black text
+                    color = curses.color_pair(6) | curses.A_BOLD
                     display_state = "USER_INPUT_REQ ⚡"
                 elif ("COMPLETED" in state or "SUCCEEDED" in state or "RESOLVED" in state or "ARCHIVED" in state) and has_pr:
                     color = curses.color_pair(2)
@@ -551,7 +544,7 @@ def draw_menu(stdscr):
                     color = curses.color_pair(2)
                     display_state = state
                 elif "FEEDBACK" in state or "INPUT" in state or "REVIEW" in state or "PAUSED" in state:
-                    color = curses.color_pair(6) | curses.A_BOLD  # Highlighted Red background with Black text
+                    color = curses.color_pair(6) | curses.A_BOLD
                     display_state = f"{state} ⚠️"
                 elif ("IN_PROGRESS" in state or "RUNNING" in state) and has_pr:
                     color = curses.color_pair(1) | curses.A_BOLD
@@ -564,6 +557,7 @@ def draw_menu(stdscr):
                     display_state = state
 
                 prefix = ">" if i == selected_idx else " "
+                local_num = i + 1
 
                 if width < 80:
                     short_state = display_state.replace("AWAITING_USER_FEEDBACK", "FEEDBACK").replace("IN_PROGRESS", "RUNNING").replace("STUCK_PATCH", "STUCK").replace("UNASSIGNED_PR", "PR_UNASSIGNED")
@@ -577,6 +571,20 @@ def draw_menu(stdscr):
                 meta_len = len(meta_prefix)
                 title_width = max(10, width - meta_len - 3)
                 wrapped_title = textwrap.wrap(title, title_width) or [title]
+                item_lines_needed = len(wrapped_title)
+
+                # If selected item would overflow screen, scroll down
+                if i == selected_idx and curr_y + item_lines_needed > max_y_bound:
+                    scroll_top += 1
+                    # Restart draw loop with incremented scroll_top
+                    stdscr.erase()
+                    curr_y = 5
+                    break
+
+                if curr_y + item_lines_needed > max_y_bound:
+                    break
+
+                start_y = curr_y
 
                 # Draw first line with metadata prefix
                 line1 = f"{meta_prefix}{wrapped_title[0]}"[:width-2]
@@ -593,8 +601,6 @@ def draw_menu(stdscr):
 
                 # Draw wrapped title lines indented under the title column
                 for extra_line in wrapped_title[1:]:
-                    if curr_y >= 5 + available_height:
-                        break
                     indented_line = f"{' ' * meta_len}{extra_line}"[:width-2]
                     if i == selected_idx:
                         stdscr.attron(curses.color_pair(5) | curses.A_BOLD)
