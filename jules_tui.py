@@ -338,9 +338,28 @@ def draw_menu(stdscr):
         except Exception:
             pass
 
+    SESSIONS_CACHE_FILE = os.path.expanduser("~/.config/jules/sessions_cache.json")
+
+    def load_cached_sessions():
+        if os.path.exists(SESSIONS_CACHE_FILE) and os.path.getsize(SESSIONS_CACHE_FILE) > 0:
+            try:
+                with open(SESSIONS_CACHE_FILE, "r") as f:
+                    return json.load(f)
+            except Exception:
+                pass
+        return []
+
+    def save_cached_sessions(sessions):
+        try:
+            os.makedirs(os.path.dirname(SESSIONS_CACHE_FILE), exist_ok=True)
+            with open(SESSIONS_CACHE_FILE, "w") as f:
+                json.dump(sessions, f, indent=2)
+        except Exception:
+            pass
+
     selected_idx = 0
     scroll_top = 0
-    sessions_cache = []
+    sessions_cache = load_cached_sessions()
     archived_sessions_cache = []
     suggestions_cache = []
     details_cache = {}
@@ -372,6 +391,10 @@ def draw_menu(stdscr):
                 # Append unassigned leftover Jules PRs from local repos
                 unassigned_prs = get_unassigned_jules_prs(new_sessions)
                 new_sessions.extend(unassigned_prs)
+
+                # Save newly fetched active sessions to disk for instant persistence on restart
+                if new_sessions:
+                    save_cached_sessions(new_sessions)
 
                 new_details = {}
                 new_pr_status = {}
