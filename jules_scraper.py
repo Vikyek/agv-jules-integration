@@ -36,13 +36,33 @@ def get_headers():
         headers["Cookie"] = cookies
     return headers
 
+DISMISSED_FILE = os.path.expanduser("~/.config/jules/dismissed_suggestions.json")
+
+def load_dismissed_suggestions():
+    if os.path.exists(DISMISSED_FILE):
+        try:
+            with open(DISMISSED_FILE, "r") as f:
+                return set(json.load(f))
+        except Exception:
+            pass
+    return set()
+
+def dismiss_suggestion(title):
+    dismissed = load_dismissed_suggestions()
+    dismissed.add(title.strip())
+    os.makedirs(os.path.dirname(DISMISSED_FILE), exist_ok=True)
+    with open(DISMISSED_FILE, "w") as f:
+        json.dump(list(dismissed), f, indent=2)
+
 def fetch_jules_suggestions(raw_html_snippet=None):
     """
     Scrapes or fetches all Jules suggestions (including class="suggestion-info" and class="suggestion-title" elements)
     from https://jules.google.com/session or stored HTML snippets/configurations.
+    Filters out dismissed suggestions.
     Returns list of suggestion dictionaries.
     """
     import re
+    dismissed_titles = load_dismissed_suggestions()
     suggestions = []
     
     html_content = raw_html_snippet
@@ -144,7 +164,7 @@ def fetch_jules_suggestions(raw_html_snippet=None):
             }
         ]
 
-    return suggestions
+    return [s for s in suggestions if s.get("title", "").strip() not in dismissed_titles]
 
 def fetch_repo_dashboard(owner, repo):
     """

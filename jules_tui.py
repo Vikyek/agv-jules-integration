@@ -792,7 +792,7 @@ def prompt_suggestions_panel(stdscr):
 
         suggestions = fetch_jules_suggestions()
 
-        footer_tips = "Keybindings: [g] start in AGY (/plan) | [j] start in Jules | [ESC] return to active sessions"
+        footer_tips = "Keybindings: [g] start in AGY | [j] start in Jules | [x] dismiss suggestion | [ESC] return to active sessions"
         stdscr.attron(curses.color_pair(1))
         stdscr.addstr(height - 1, 0, footer_tips.center(width)[:width-1])
         stdscr.attroff(curses.color_pair(1))
@@ -909,6 +909,15 @@ def prompt_suggestions_panel(stdscr):
                 status_msg = f"🚀 Launched interactive AGY ({agy_mode}) window for suggestion #{selected_idx + 1}"
             except Exception as e:
                 status_msg = f"Error launching AGY window: {e}"
+        elif ch in (ord('x'), ord('X')) and suggestions:
+            curr_sug = suggestions[selected_idx]
+            task_title = curr_sug.get("title", "")
+            if prompt_confirm(stdscr, f"Dismiss suggestion #{selected_idx + 1}?"):
+                from jules_scraper import dismiss_suggestion
+                dismiss_suggestion(task_title)
+                status_msg = f"🗑️ Dismissed suggestion #{selected_idx + 1}"
+            else:
+                status_msg = "Cancelled dismissal."
         elif ch in (ord('j'), ord('J')) and suggestions:
             curr_sug = suggestions[selected_idx]
             task_title = curr_sug.get("title", "")
@@ -916,6 +925,8 @@ def prompt_suggestions_panel(stdscr):
             from jules_manager import create_session
             res = create_session(task_title, f"sources/github/{repo_name}", "main")
             if "error" not in res:
+                from jules_scraper import dismiss_suggestion
+                dismiss_suggestion(task_title)
                 status_msg = f"🚀 Created Jules session for suggestion #{selected_idx + 1}"
             else:
                 status_msg = f"Error creating session: {res.get('error')}"
