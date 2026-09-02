@@ -1041,8 +1041,8 @@ def prompt_suggestions_panel(stdscr, preloaded_suggestions=None):
     spinner_frames = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
     spin_idx = 0
 
-    # Use preloaded suggestions if available, otherwise fetch
-    suggestions = preloaded_suggestions if preloaded_suggestions is not None else fetch_jules_suggestions(filter_dismissed=False)
+    # Use preloaded suggestions if available, otherwise fetch with filter_dismissed=True
+    suggestions = preloaded_suggestions if preloaded_suggestions is not None else fetch_jules_suggestions(filter_dismissed=True)
     dismissed_set = load_dismissed_suggestions()
 
     while True:
@@ -1377,18 +1377,19 @@ def prompt_suggestions_panel(stdscr, preloaded_suggestions=None):
                 status_msg = "Cancelled batch execution."
         elif ch in (ord('r'), ord('R')):
             from jules_scraper import dismiss_suggestion, load_dismissed_suggestions, fetch_jules_suggestions
-            # Auto-archive any completed/verified suggestions currently visible
+            # Auto-archive any completed/verified suggestions currently in agy_task_status or visible list
             auto_archived_count = 0
-            for sug in suggestions:
+            for sug in list(suggestions):
                 t_title = sug.get("title", "")
                 st = agy_task_status.get(t_title, "")
                 if ("COMPLETED" in st or "VERIFIED" in st or "DONE" in st) and t_title:
                     dismiss_suggestion(t_title)
                     auto_archived_count += 1
-            suggestions = fetch_jules_suggestions(filter_dismissed=False)
+            # Fetch fresh list with filter_dismissed=True so dismissed/archived suggestions are stripped
+            suggestions = fetch_jules_suggestions(filter_dismissed=True)
             dismissed_set = load_dismissed_suggestions()
             if auto_archived_count > 0:
-                status_msg = f"🔄 Refreshed list & auto-archived {auto_archived_count} completed suggestion(s)!"
+                status_msg = f"🔄 Refreshed & auto-archived {auto_archived_count} completed suggestion(s)!"
             else:
                 status_msg = "🔄 Refreshed proactive suggestions list."
         elif ch in (ord('x'), ord('X')) and suggestions:
