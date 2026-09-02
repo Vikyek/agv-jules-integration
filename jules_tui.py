@@ -855,7 +855,8 @@ def prompt_suggestions_panel(stdscr):
 
                 title = sug.get("title", "Untitled Suggestion")
                 details = sug.get("details", "")
-                repo = sug.get("repo", "Vikyek/paru-wrapper")
+                raw_repo = sug.get("repo", "Vikyek/paru-wrapper")
+                repo = raw_repo.split("/")[-1] if "/" in raw_repo else raw_repo
 
                 start_y = curr_y
                 is_selected = (i in selected_set)
