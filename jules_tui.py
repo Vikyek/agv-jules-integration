@@ -919,7 +919,9 @@ def prompt_suggestions_panel(stdscr):
             def run_agy_task(title, prompt, flg):
                 agy_task_status[title] = "RUNNING ⏳"
                 try:
-                    res = subprocess.run(f"/usr/sbin/agy {flg} -p \"{prompt}\"", shell=True, capture_output=True, text=True)
+                    import shlex
+                    cmd_args = ["/usr/sbin/agy"] + shlex.split(flg) + ["-p", prompt]
+                    res = subprocess.run(cmd_args, capture_output=True, text=True)
                     if res.returncode == 0:
                         from jules_scraper import dismiss_suggestion
                         dismiss_suggestion(title)
@@ -950,7 +952,9 @@ def prompt_suggestions_panel(stdscr):
             def check_agy_task(title, prompt, flg):
                 agy_task_status[title] = "VERIFYING 🔍"
                 try:
-                    res = subprocess.run(f"/usr/sbin/agy {flg} -p \"{prompt}\"", shell=True, capture_output=True, text=True)
+                    import shlex
+                    cmd_args = ["/usr/sbin/agy"] + shlex.split(flg) + ["-p", prompt]
+                    res = subprocess.run(cmd_args, capture_output=True, text=True)
                     if "SUCCESS" in res.stdout.upper():
                         from jules_scraper import dismiss_suggestion
                         dismiss_suggestion(title)
