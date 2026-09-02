@@ -478,19 +478,9 @@ def draw_menu(stdscr):
         if now - last_fetch > 10 or not sessions_cache:
             bg_fetch()
 
-        # Multi-line footer keybindings bar wrapping calculation (using non-breaking spaces \u00A0 between keybind badge and label)
-        long_tips = f"Keybindings: [s]\u00A0{'stop' if svc_active else 'start'}\u00A0service | [u]\u00A0unstuck\u00A0session | [g]\u00A0suggestions | [o]\u00A0AGY\u00A0mode | [d]\u00A0AGY\u00A0perms | [b]\u00A0autostart | [p]\u00A0open\u00A0PR | [w]\u00A0Jules\u00A0web\u00A0UI | [h]\u00A0history\u00A0log | [v]\u00A0archived\u00A0collection | [q]\u00A0quit"
-        if len(long_tips) <= width - 4:
-            raw_tips = long_tips
-        else:
-            # Strip "Keybindings: " prefix before shortening labels or wrapping lines
-            nokey_tips = f"[s]\u00A0{'stop' if svc_active else 'start'}\u00A0service | [u]\u00A0unstuck\u00A0session | [g]\u00A0suggestions | [o]\u00A0AGY\u00A0mode | [d]\u00A0AGY\u00A0perms | [b]\u00A0autostart | [p]\u00A0open\u00A0PR | [w]\u00A0Jules\u00A0web\u00A0UI | [h]\u00A0history\u00A0log | [v]\u00A0archived\u00A0collection | [q]\u00A0quit"
-            if len(nokey_tips) <= width - 4:
-                raw_tips = nokey_tips
-            else:
-                raw_tips = f"[s]\u00A0{'stop' if svc_active else 'start'} | [u]\u00A0unstuck | [g]\u00A0suggestions | [o]\u00A0agy-mode | [d]\u00A0perms | [b]\u00A0auto | [p]\u00A0open\u00A0PR | [w]\u00A0Jules\u00A0web\u00A0UI | [h]\u00A0history | [v]\u00A0archived | [q]\u00A0quit"
-
-        raw_footer_lines = textwrap.wrap(raw_tips, max(20, width - 4)) or [raw_tips]
+        # Multi-line footer keybindings bar wrapping calculation
+        full_tips = f"Keybindings: [s]\u00A0{'stop' if svc_active else 'start'}\u00A0service | [u]\u00A0unstuck\u00A0session | [g]\u00A0suggestions | [o]\u00A0AGY\u00A0mode | [d]\u00A0AGY\u00A0perms | [b]\u00A0autostart | [p]\u00A0open\u00A0PR | [w]\u00A0Jules\u00A0web\u00A0UI | [h]\u00A0history\u00A0log | [v]\u00A0archived\u00A0collection | [q]\u00A0quit"
+        raw_footer_lines = textwrap.wrap(full_tips, max(20, width - 4)) or [full_tips]
         footer_lines = [l.strip().lstrip("|").rstrip("|").strip() for l in raw_footer_lines]
         footer_height = len(footer_lines)
 
@@ -1066,18 +1056,9 @@ def prompt_suggestions_panel(stdscr, preloaded_suggestions=None):
         stdscr.addstr(0, 0, header[:width].center(width))
         stdscr.attroff(curses.color_pair(5) | curses.A_BOLD)
 
-        # Multi-line footer keybindings bar wrapping calculation (using non-breaking spaces \u00A0 between keybind badge and label)
-        long_sug_tips = f"Keybindings: [a] select all | [space] toggle | [i] inspect details | [g] start AGY ({len(selected_set)}) | [c] check | [j] Jules | [h] history | [v] archived | [r] refresh | [x] dismiss | [ESC] return"
-        if len(long_sug_tips) <= width - 4:
-            raw_sug_tips = long_sug_tips
-        else:
-            nokey_tips = f"[a]\u00A0select\u00A0all | [space]\u00A0toggle | [i]\u00A0inspect | [g]\u00A0start\u00A0({len(selected_set)}) | [c]\u00A0check | [j]\u00A0Jules | [h]\u00A0history | [v]\u00A0archived | [r]\u00A0refresh | [x]\u00A0dismiss | [ESC]\u00A0return"
-            if len(nokey_tips) <= width - 4:
-                raw_sug_tips = nokey_tips
-            else:
-                raw_sug_tips = f"[a]\u00A0all | [spc]\u00A0sel | [i]\u00A0det | [g]\u00A0agy\u00A0({len(selected_set)}) | [c]\u00A0chk | [j]\u00A0jules | [h]\u00A0hist | [v]\u00A0arch | [r]\u00A0ref | [x]\u00A0dis | [ESC]\u00A0ret"
-
-        raw_sug_lines = textwrap.wrap(raw_sug_tips, max(20, width - 4)) or [raw_sug_tips]
+        # Multi-line footer keybindings bar wrapping calculation
+        full_sug_tips = f"Keybindings: [a]\u00A0select\u00A0all | [space]\u00A0toggle | [i]\u00A0inspect\u00A0details | [g]\u00A0start\u00A0AGY\u00A0({len(selected_set)}) | [c]\u00A0check | [j]\u00A0Jules | [h]\u00A0history | [v]\u00A0archived | [r]\u00A0refresh | [x]\u00A0dismiss | [ESC]\u00A0return"
+        raw_sug_lines = textwrap.wrap(full_sug_tips, max(20, width - 4)) or [full_sug_tips]
         sug_footer_lines = [l.strip().lstrip("|").rstrip("|").strip() for l in raw_sug_lines]
         sug_footer_height = len(sug_footer_lines)
 
