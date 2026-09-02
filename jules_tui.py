@@ -924,13 +924,14 @@ def prompt_suggestions_panel(stdscr):
             cfg = load_config()
             skip_perms = cfg.get("agy_skip_permissions", True)
             
-            check_prompt = f"Check if the following suggestion is already completed or fixed in {repo_name}: '{task_title}: {task_details}'. If it is fixed or satisfied, output SUCCESS. Otherwise output INCOMPLETE."
+            safe_details = task_details.replace("'", "").replace('"', "")
+            check_prompt = f"Check if the following suggestion is already completed or fixed in {repo_name}: {task_title} - {safe_details}. If it is fixed or satisfied, output SUCCESS. Otherwise output INCOMPLETE."
             flags = "--mode accept-edits"
             if skip_perms:
                 flags += " --dangerously-skip-permissions"
 
-            escaped_title = task_title.replace("'", "'\\''")
-            cmd_script = f"/usr/sbin/agy {flags} -p '{check_prompt}' | grep -qi 'SUCCESS' && python3 -c 'from jules_scraper import dismiss_suggestion; dismiss_suggestion(\"{escaped_title}\")'"
+            escaped_title = task_title.replace("'", "\\'")
+            cmd_script = f"echo 'Checking: {task_title}...'; /usr/sbin/agy {flags} -p \"{check_prompt}\" | grep -qi 'SUCCESS' && python3 -c 'from jules_scraper import dismiss_suggestion; dismiss_suggestion(\"{escaped_title}\")'; read -p 'Press Enter to close...'"
 
             try:
                 import subprocess
@@ -1397,7 +1398,15 @@ def kill_previous_tui_instances():
         pass
 
 def main():
-    kill_previous_tui_instances()
+    import argparse
+    parser = argparse.ArgumentParser(description="Jules Terminal UI")
+    parser.add_argument("--no-kill", action="store_true", help="Do not kill previous running TUI instances (useful for debugging)")
+    parser.add_argument("--debug", action="store_true", help="Enable debug logging output to stdout/stderr")
+    args = parser.parse_args()
+
+    if not args.no_kill:
+        kill_previous_tui_instances()
+
     try:
         curses.wrapper(draw_menu)
     except KeyboardInterrupt:
