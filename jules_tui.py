@@ -344,6 +344,7 @@ def draw_menu(stdscr):
     archived_sessions_cache = []
     suggestions_cache = []
     details_cache = {}
+    pr_status_cache = {}
     last_fetch = 0
     action_msg = ""
     cfg = load_config()
@@ -354,14 +355,14 @@ def draw_menu(stdscr):
     is_fetching = False
 
     def bg_fetch(force=False):
-        nonlocal is_fetching, sessions_cache, archived_sessions_cache, suggestions_cache, details_cache, last_fetch
+        nonlocal is_fetching, sessions_cache, archived_sessions_cache, suggestions_cache, details_cache, pr_status_cache, last_fetch
         with fetch_lock:
             if is_fetching:
                 return
             is_fetching = True
 
         def run_work():
-            nonlocal is_fetching, sessions_cache, archived_sessions_cache, suggestions_cache, details_cache, last_fetch
+            nonlocal is_fetching, sessions_cache, archived_sessions_cache, suggestions_cache, details_cache, pr_status_cache, last_fetch
             try:
                 # 1. Preload Active Sessions
                 res = list_sessions(include_archived=False)
@@ -373,6 +374,7 @@ def draw_menu(stdscr):
                 new_sessions.extend(unassigned_prs)
 
                 new_details = {}
+                new_pr_status = {}
                 for s in new_sessions:
                     sid = s.get("id") or s.get("name", "").split("/")[-1]
                     if s.get("is_unassigned_pr"):
@@ -385,6 +387,7 @@ def draw_menu(stdscr):
                             "session": s,
                             "activities": get_session_activities(sid)
                         }
+                    new_pr_status[sid] = check_session_pr_status(s)
 
                 # 2. Preload Archived Sessions Collection
                 arch_res = list_sessions(include_archived=True)
@@ -401,6 +404,7 @@ def draw_menu(stdscr):
                     archived_sessions_cache = new_archived
                     suggestions_cache = new_sugs
                     details_cache = new_details
+                    pr_status_cache = new_pr_status
                     last_fetch = time.time()
             except Exception:
                 pass
@@ -425,19 +429,26 @@ def draw_menu(stdscr):
     prev_svc_active = None
 
     view_archived = False
+    last_svc_check_time = 0
+    svc_active = False
+    auto_enabled = False
+    svc_str = "STOPPED"
+    auto_str = "DISABLED"
 
     while True:
         stdscr.erase()
         height, width = stdscr.getmaxyx()
 
-        # Check service status live
-        svc_check = subprocess.run(["systemctl", "--user", "is-active", "jules-listener.service"], capture_output=True, text=True)
-        svc_active = svc_check.stdout.strip() == "active"
-        svc_str = "RUNNING" if svc_active else "STOPPED"
+        now_t = time.time()
+        if now_t - last_svc_check_time > 2.0:
+            last_svc_check_time = now_t
+            svc_check = subprocess.run(["systemctl", "--user", "is-active", "jules-listener.service"], capture_output=True, text=True)
+            svc_active = svc_check.stdout.strip() == "active"
+            svc_str = "RUNNING" if svc_active else "STOPPED"
 
-        auto_check = subprocess.run(["systemctl", "--user", "is-enabled", "jules-listener.service"], capture_output=True, text=True)
-        auto_enabled = "enabled" in auto_check.stdout.strip()
-        auto_str = "ENABLED" if auto_enabled else "DISABLED"
+            auto_check = subprocess.run(["systemctl", "--user", "is-enabled", "jules-listener.service"], capture_output=True, text=True)
+            auto_enabled = "enabled" in auto_check.stdout.strip()
+            auto_str = "ENABLED" if auto_enabled else "DISABLED"
 
         # Unexpected Service Stop Detection
         unexpected_stop = (not svc_active) and (prev_svc_active is True) and (not user_stopped_service)
@@ -530,13 +541,16 @@ def draw_menu(stdscr):
 
                 clean_title = raw_title.lstrip("#").strip().replace("\n", " ")
                 title = clean_title
-                pr_st = check_session_pr_status(s)
+                sid = s.get("id") or s.get("name", "").split("/")[-1]
+                pr_st = pr_status_cache.get(sid) or {
+                    "has_pr": False, "pr_number": None, "status_checks_failing": False,
+                    "has_review_issues": False, "mergeable": "UNKNOWN", "needs_update": False, "url": ""
+                }
                 has_pr = pr_st["has_pr"]
                 pr_failed = pr_st["status_checks_failing"]
                 pr_issues = pr_st["has_review_issues"]
                 pr_conflict = pr_st["needs_update"]
 
-                sid = s.get("id") or s.get("name", "").split("/")[-1]
                 pre_acts = details_cache.get(sid, {}).get("activities")
                 is_stuck, stuck_reason = check_session_stuck_or_plan_loop(sid, preloaded_activities=pre_acts)
 
