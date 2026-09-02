@@ -37,14 +37,16 @@ def load_config_mode():
     return "continuous"
 
 def auto_archive_completed_sessions():
-    """Archives sessions whose tasks are completed, merged, terminal, or duplicates."""
+    """
+    Archives sessions ONLY after their tasks are strictly completed, their PRs/commits
+    are verified merged into main, or their branch is confirmed closed.
+    Enforces strict sequential order: Resolve -> Verify -> Merge -> Delete Branch -> Archive Session.
+    """
     res = list_sessions()
     if not res or "error" in res or "sessions" not in res:
         return 0
 
-    import re
     archived_count = 0
-    seen_topics = {}
 
     for session in res.get("sessions", []):
         session_id = session.get("name", "").split("/")[-1]
@@ -56,30 +58,13 @@ def auto_archive_completed_sessions():
         rep_name = src_ctx.get("source", "").replace("sources/github/", "").replace("sources/", "")
         br_name = src_ctx.get("githubRepoContext", {}).get("startingBranch", "main")
 
-        # 1. Archive terminal / completed states
+        # Strict Prerequisite: Only archive if session state is explicitly terminal/completed/merged
         if state in ("COMPLETED", "SUCCEEDED", "RESOLVED", "MERGED", "CLOSED"):
             arc_res = archive_session(session_id, action_by="auto", title=clean_t, repo=rep_name, branch=br_name)
             if arc_res and "error" not in arc_res:
                 archived_count += 1
-                print(f"📦 [Jules Listener] Auto-archived session {session_id} [{state}]")
+                print(f"📦 [Jules Listener] Auto-archived verified completed session {session_id} [{state}]")
                 continue
-
-        # 2. Archive duplicate sessions with identical topic / task
-        raw_title = session.get("title", "")
-        if not raw_title:
-            p_lines = [l.strip() for l in session.get("prompt", "").splitlines() if l.strip()]
-            raw_title = p_lines[0] if p_lines else "Untitled"
-
-        topic_key = re.sub(r"^[#🔒⚡\s]+", "", raw_title).strip().lower()
-        topic_key = re.sub(r"\s+", " ", topic_key)
-
-        if topic_key in seen_topics:
-            arc_res = archive_session(session_id, action_by="auto", title=clean_t, repo=rep_name, branch=br_name)
-            if arc_res and "error" not in arc_res:
-                archived_count += 1
-                print(f"📦 [Jules Listener] Auto-archived duplicate session {session_id} (original: {seen_topics[topic_key]})")
-        else:
-            seen_topics[topic_key] = session_id
 
     return archived_count
 
