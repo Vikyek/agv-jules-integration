@@ -837,28 +837,34 @@ def prompt_suggestions_panel(stdscr):
                 prefix = ">" if i == selected_idx else " "
                 line1 = f"{prefix} [#{i+1}] [{repo}] {title}"[:width-2]
 
-                if i == selected_idx:
-                    stdscr.attron(curses.color_pair(5) | curses.A_BOLD)
-                    stdscr.addstr(curr_y, 1, line1)
-                    stdscr.attroff(curses.color_pair(5) | curses.A_BOLD)
-                else:
-                    stdscr.attron(curses.color_pair(1))
-                    stdscr.addstr(curr_y, 1, line1)
-                    stdscr.attroff(curses.color_pair(1))
+                if 0 <= curr_y < height - 2:
+                    if i == selected_idx:
+                        stdscr.attron(curses.color_pair(5) | curses.A_BOLD)
+                        stdscr.addstr(curr_y, 1, line1)
+                        stdscr.attroff(curses.color_pair(5) | curses.A_BOLD)
+                    else:
+                        stdscr.attron(curses.color_pair(1))
+                        stdscr.addstr(curr_y, 1, line1)
+                        stdscr.attroff(curses.color_pair(1))
 
                 curr_y += 1
-                if details:
+                if details and 0 <= curr_y < height - 2:
                     detail_line = f"     ↳ {details}"[:width-4]
                     stdscr.attron(curses.color_pair(7 if i != selected_idx else 5))
                     stdscr.addstr(curr_y, 1, detail_line)
                     stdscr.attroff(curses.color_pair(7 if i != selected_idx else 5))
                     curr_y += 1
-                if agy_task_status.get(title):
+                elif details:
+                    curr_y += 1
+
+                if agy_task_status.get(title) and 0 <= curr_y < height - 2:
                     status_info = agy_task_status[title]
                     status_line = f"     ⚡ AGY Task Status: [{status_info}]"[:width-4]
                     stdscr.attron(curses.color_pair(3 if "ERROR" in status_info or "FAILED" in status_info else 1))
                     stdscr.addstr(curr_y, 1, status_line)
                     stdscr.attroff(curses.color_pair(3 if "ERROR" in status_info or "FAILED" in status_info else 1))
+                    curr_y += 1
+                elif agy_task_status.get(title):
                     curr_y += 1
 
                 end_y = curr_y - 1
