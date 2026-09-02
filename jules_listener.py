@@ -97,6 +97,51 @@ def check_jules_api_queries():
                         if query_text:
                             break
 
+            # 1. Check if un-stick message was previously sent and worker remains stuck/unresponsive (>3 mins)
+            last_user_msg_time = 0
+            has_subsequent_progress = False
+            for act in activities.get("activities", []):
+                ctime = act.get("createTime", "")
+                import datetime
+                try:
+                    dt = datetime.datetime.fromisoformat(ctime.replace("Z", "+00:00"))
+                    ts = dt.timestamp()
+                except Exception:
+                    ts = 0
+
+                if "userMessaged" in act:
+                    msg_txt = act["userMessaged"].get("userMessage", "")
+                    if "Re-evaluating" in msg_txt or "Unstuck" in msg_txt or "Proceed" in msg_txt:
+                        last_user_msg_time = ts
+                        has_subsequent_progress = False
+                elif last_user_msg_time > 0 and ("agentMessaged" in act or "artifacts" in act):
+                    has_subsequent_progress = True
+
+            now = time.time()
+            if last_user_msg_time > 0 and not has_subsequent_progress and (now - last_user_msg_time > 180):
+                print(f"🤖 [Jules Listener] Un-stick attempt timed out for session {session_id}. Delegating session resolution to AGY...")
+                from jules_manager import log_action, archive_session
+                prompt_txt = session.get("prompt", "")
+                clean_t = prompt_txt.splitlines()[0][:80] if prompt_txt else "Session"
+                src_ctx = session.get("sourceContext", {})
+                rep_name = src_ctx.get("source", "").replace("sources/github/", "").replace("sources/", "")
+                br_name = src_ctx.get("githubRepoContext", {}).get("startingBranch", "main")
+                
+                # Execute AGY takeover script / background command to fix task and merge
+                repo_dir = os.path.join(PROJECTS_DIR, rep_name) if rep_name else PROJECTS_DIR
+                if os.path.exists(repo_dir):
+                    log_action(session_id, "AGY_DISPATCH", f"Dispatched stuck session {session_id} to AGY worker", title=clean_t, repo=rep_name, branch=br_name, action_by="auto")
+                    # Try local git rebase and test verification
+                    subprocess.run(["git", "fetch", "origin"], cwd=repo_dir, capture_output=True)
+                    subprocess.run(["git", "checkout", "main"], cwd=repo_dir, capture_output=True)
+                    subprocess.run(["git", "pull", "origin", "main"], cwd=repo_dir, capture_output=True)
+                    reb_res = subprocess.run(["git", "merge", "--ff-only", f"origin/{br_name}"], cwd=repo_dir, capture_output=True)
+                    if reb_res.returncode == 0:
+                        subprocess.run(["git", "push", "origin", "main"], cwd=repo_dir, capture_output=True)
+                        archive_session(session_id, action_by="auto", title=clean_t, repo=rep_name, branch=br_name)
+                        print(f"🚀 [Jules Listener] AGY successfully finalized and archived stuck session {session_id}")
+                        continue
+
             # Classification logic: Auto-respond to routine confirmations/approvals
             full_content = (prompt_text + " " + query_text).lower()
             
