@@ -1263,6 +1263,8 @@ def prompt_suggestions_panel(stdscr, preloaded_suggestions=None):
 
                 if agy_task_status.get(title):
                     raw_info = agy_task_status[title]
+                    is_jules = "JULES" in raw_info.upper() or "JULES_SESSION" in raw_info.upper()
+                    worker_icon = "🤖 Jules" if is_jules else "⚡ AGY"
                     if raw_info == "RUNNING":
                         status_info = f"RUNNING {spin_char}"
                     elif raw_info == "VERIFYING":
@@ -1270,7 +1272,7 @@ def prompt_suggestions_panel(stdscr, preloaded_suggestions=None):
                     else:
                         status_info = raw_info
 
-                    wrapped_status = textwrap.wrap(f"⚡ AGY Task Status: [{status_info}]", max(20, width - 8)) or [f"⚡ AGY Task Status: [{status_info}]"]
+                    wrapped_status = textwrap.wrap(f"{worker_icon} Task Status: [{status_info}]", max(20, width - 8)) or [f"{worker_icon} Task Status: [{status_info}]"]
                     for s_idx, s_line in enumerate(wrapped_status):
                         if 0 <= curr_y < height - 2:
                             prefix_space = "       " if s_idx == 0 else "         "
@@ -1283,7 +1285,7 @@ def prompt_suggestions_panel(stdscr, preloaded_suggestions=None):
                         else:
                             curr_y += 1
                 elif title.strip() in dismissed_set and 0 <= curr_y < height - 2:
-                    status_line = "       ⚡ AGY Task Status: [COMPLETED ✅]"[:width-4]
+                    status_line = "       🤖 Jules Task Status: [COMPLETED ✅]"[:width-4]
                     stdscr.attron(curses.color_pair(7))
                     stdscr.addstr(curr_y, 1, status_line)
                     stdscr.attroff(curses.color_pair(7))
@@ -1526,6 +1528,8 @@ def prompt_suggestions_panel(stdscr, preloaded_suggestions=None):
             if "error" not in res:
                 from jules_scraper import dismiss_suggestion
                 dismiss_suggestion(task_title)
+                agy_task_status[task_title] = "🤖 JULES_SESSION (RUNNING)"
+                save_agy_task_statuses(agy_task_status)
                 status_msg = f"🚀 Created Jules session for suggestion #{selected_idx + 1}"
             else:
                 status_msg = f"Error creating session: {res.get('error')}"
