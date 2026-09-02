@@ -81,6 +81,10 @@ def draw_menu(stdscr):
     except Exception:
         pass
     try:
+        curses.mousemask(curses.ALL_MOUSE_EVENTS | curses.REPORT_MOUSE_POSITION)
+    except Exception:
+        pass
+    try:
         curses.init_pair(1, curses.COLOR_YELLOW, -1)           # Main text (Yellow)
         curses.init_pair(2, curses.COLOR_GREEN, -1)            # Completed state (Green)
         curses.init_pair(3, curses.COLOR_RED, -1)              # Feedback / Warning (Red)
@@ -197,6 +201,7 @@ def draw_menu(stdscr):
         # Calculate available vertical space for sessions list
         available_height = height - 5 - footer_height - (1 if action_msg else 0)
         curr_y = 5
+        session_row_map = {}
 
         if not sessions_cache:
             stdscr.addstr(5, 2, "No active sessions found.", curses.color_pair(3))
@@ -205,6 +210,7 @@ def draw_menu(stdscr):
                 if curr_y >= 4 + available_height:
                     break
 
+                start_y = curr_y
                 s = sessions_cache[i]
                 local_num = i + 1
                 state = s.get("state", "UNKNOWN")
@@ -277,6 +283,8 @@ def draw_menu(stdscr):
                         stdscr.attroff(color)
                     curr_y += 1
 
+                session_row_map[i] = (start_y, curr_y - 1)
+
         # Action notification message line
         if action_msg:
             msg_y = height - 1 - footer_height
@@ -304,7 +312,34 @@ def draw_menu(stdscr):
         stdscr.timeout(150)
         key = stdscr.getch()
 
-        if key in (ord('q'), ord('Q')):
+        if key == curses.KEY_MOUSE:
+            try:
+                _, mx, my, _, bstate = curses.getmouse()
+                if my == 1:
+                    # Click top mode bar to toggle service
+                    action_name = "Stop background listener service?" if svc_active else "Start background listener service?"
+                    if prompt_confirm(stdscr, action_name):
+                        if svc_active:
+                            user_stopped_service = True
+                        action_msg = toggle_systemd_service()
+                        last_fetch = 0
+                else:
+                    # Mouse click on session row
+                    for idx_item, (sy, ey) in session_row_map.items():
+                        if sy <= my <= ey:
+                            if selected_idx == idx_item:
+                                # Double click / click already selected -> Open inspection modal
+                                curr_s = sessions_cache[selected_idx]
+                                sid = curr_s.get("id") or curr_s.get("name", "").split("/")[-1]
+                                pre_data = details_cache.get(sid)
+                                action_msg = prompt_reply(stdscr, sid, selected_idx + 1, preloaded_data=pre_data)
+                                last_fetch = 0
+                            else:
+                                selected_idx = idx_item
+                            break
+            except Exception:
+                pass
+        elif key in (ord('q'), ord('Q')):
             # Persistent session history retention: Do NOT kill background service or delete cache on TUI exit
             break
         elif key == curses.KEY_UP and selected_idx > 0:
