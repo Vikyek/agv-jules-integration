@@ -318,6 +318,56 @@ def draw_menu(stdscr):
     action_msg = ""
     cfg = load_config()
 
+    # Threading locks and state for non-blocking UI
+    import threading
+    fetch_lock = threading.Lock()
+    is_fetching = False
+
+    def bg_fetch():
+        nonlocal is_fetching, sessions_cache, details_cache, last_fetch
+        with fetch_lock:
+            if is_fetching:
+                return
+            is_fetching = True
+
+        def run_work():
+            nonlocal is_fetching, sessions_cache, details_cache, last_fetch
+            try:
+                res = list_sessions(include_archived=False)
+                raw_sessions = res.get("sessions", []) if isinstance(res, dict) else []
+                new_sessions = [s for s in raw_sessions if s.get("state") not in ("ARCHIVED", "CLOSED")]
+                
+                # Append unassigned leftover Jules PRs from local repos
+                unassigned_prs = get_unassigned_jules_prs(new_sessions)
+                new_sessions.extend(unassigned_prs)
+
+                new_details = {}
+                for s in new_sessions:
+                    sid = s.get("id") or s.get("name", "").split("/")[-1]
+                    if s.get("is_unassigned_pr"):
+                        new_details[sid] = {
+                            "session": s,
+                            "activities": {"activities": [{"agentMessaged": {"agentMessage": f"Unassigned Jules PR #{s.get('pr_number')} in {s.get('repo')} ({s.get('branch')})"}}]}
+                        }
+                    else:
+                        new_details[sid] = {
+                            "session": s,
+                            "activities": get_session_activities(sid)
+                        }
+
+                with fetch_lock:
+                    sessions_cache = new_sessions
+                    details_cache = new_details
+                    last_fetch = time.time()
+            except Exception:
+                pass
+            finally:
+                with fetch_lock:
+                    is_fetching = False
+
+        t = threading.Thread(target=run_work, daemon=True)
+        t.start()
+
     # Startup check: If system autostart is disabled, open with listener turned off
     enabled_check = subprocess.run(["systemctl", "--user", "is-enabled", "jules-listener.service"], capture_output=True, text=True)
     is_autostart = "enabled" in enabled_check.stdout.strip()
@@ -378,32 +428,10 @@ def draw_menu(stdscr):
         stdscr.addstr(1, 0, mode_str.center(width)[:width])
         stdscr.attroff(mode_color)
 
-        # Fetch and preload all sessions & activities into memory
+        # Trigger non-blocking background fetch if cache stale or empty
         now = time.time()
         if now - last_fetch > 10 or not sessions_cache:
-            res = list_sessions(include_archived=False)
-            raw_sessions = res.get("sessions", []) if isinstance(res, dict) else []
-            sessions_cache = [s for s in raw_sessions if s.get("state") not in ("ARCHIVED", "CLOSED")]
-            
-            # Append unassigned leftover Jules PRs from local repos
-            unassigned_prs = get_unassigned_jules_prs(sessions_cache)
-            sessions_cache.extend(unassigned_prs)
-            
-            # Preload full activities for all cached sessions
-            for s in sessions_cache:
-                sid = s.get("id") or s.get("name", "").split("/")[-1]
-                if sid not in details_cache:
-                    if s.get("is_unassigned_pr"):
-                        details_cache[sid] = {
-                            "session": s,
-                            "activities": {"activities": [{"agentMessaged": {"agentMessage": f"Unassigned Jules PR #{s.get('pr_number')} in {s.get('repo')} ({s.get('branch')})"}}]}
-                        }
-                    else:
-                        details_cache[sid] = {
-                            "session": s,
-                            "activities": get_session_activities(sid)
-                        }
-            last_fetch = now
+            bg_fetch()
 
         # Multi-line footer keybindings bar wrapping calculation (using non-breaking spaces \\u00A0 between keybind badge and label)
         if width < 80:
