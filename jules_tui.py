@@ -833,10 +833,10 @@ def prompt_suggestions_panel(stdscr):
             repo_name = curr_sug.get("repo", "Vikyek/paru-wrapper")
             
             prompt_str = f"/plan {task_title}: {task_details} in {repo_name}"
-            # Spawn interactive terminal window running AGY with the /plan prompt
+            # Spawn interactive terminal window running AGY with -i / --prompt-interactive
             try:
                 import subprocess
-                cmd = ["i3-msg", "exec", "--no-startup-id", f"/usr/sbin/kitty --title 'AGY - {task_title[:20]}' -e /usr/sbin/agy '{prompt_str}'"]
+                cmd = ["i3-msg", "exec", "--no-startup-id", f"/usr/sbin/kitty --title 'AGY - {task_title[:20]}' -e /usr/sbin/agy -i '{prompt_str}'"]
                 subprocess.Popen(cmd)
                 status_msg = f"🚀 Launched interactive AGY /plan window for suggestion #{selected_idx + 1}"
             except Exception as e:
