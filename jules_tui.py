@@ -109,8 +109,7 @@ def draw_menu(stdscr):
     if not is_autostart:
         subprocess.run(["systemctl", "--user", "stop", "jules-listener.service"], capture_output=True, text=True)
 
-    listen_frames = ["📡", "🛰️", "⚡", "✨"]
-    swirl_frames = ["🌀", "🔄", "💫", "✨"]
+    listen_frames = ["⣾", "⣽", "⣻", "⢿", "⡿", "⣟", "⣯", "⣷"]
     braille_swirl = ["⣾", "⣽", "⣻", "⢿", "⡿", "⣟", "⣯", "⣷"]
 
     view_archived = False
@@ -128,11 +127,10 @@ def draw_menu(stdscr):
         auto_enabled = "enabled" in auto_check.stdout.strip()
         auto_str = "ENABLED" if auto_enabled else "DISABLED"
 
-        # Animated listener icon & swirly work indicator
+        # Subtle clean Braille spinner animation for active service
         curr_frame_idx = int(time.time() * 6)
-        swirl_icon = swirl_frames[curr_frame_idx % len(swirl_frames)]
         braille_icon = braille_swirl[curr_frame_idx % len(braille_swirl)]
-        listen_icon = listen_frames[int(time.time() * 2) % len(listen_frames)] if svc_active else "💤"
+        listen_icon = listen_frames[curr_frame_idx % len(listen_frames)] if svc_active else "OFF"
 
         # Header (Yellow background with Red text, Jules logo 󱚝)
         header_title = " 󱚝 JULES MANAGER " if width < 80 else " 󱚝 GOOGLE JULES API MANAGER & LISTENER TUI "
