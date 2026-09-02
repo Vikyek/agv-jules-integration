@@ -517,6 +517,7 @@ def draw_menu(stdscr):
                     break
 
                 s = sessions_cache[i]
+                state = s.get("state", "UNKNOWN")
                 raw_title = s.get("title", "")
                 if not raw_title or len(raw_title) > 100 or "\n" in raw_title:
                     title_lines = [l.strip() for l in (raw_title or s.get("prompt", "")).splitlines() if l.strip()]
