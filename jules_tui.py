@@ -924,12 +924,15 @@ def copy_to_clipboard(text):
 
 def prompt_suggestion_details_panel(stdscr, sug, agy_status=""):
     """
-    Displays an interactive full-screen Details Inspector for a recommendation.
-    Allows viewing full recommendation text, exact AGY prompt payload, and copying
-    details or error messages directly to system clipboard.
+    Displays a scrollable full-screen Inspector panel for a recommendation/task displaying:
+    - Target repo and description details
+    - AGY execution prompt payload
+    - Current status/error
+    - Complete thought process, activity log, and action history timeline
     """
     stdscr.timeout(-1)
     status_msg = ""
+    scroll_top = 0
     title = sug.get("title", "")
     details = sug.get("details", "")
     repo = sug.get("repo", "Vikyek/paru-wrapper")
@@ -941,16 +944,31 @@ def prompt_suggestion_details_panel(stdscr, sug, agy_status=""):
     prompt_prefix = f"/{agy_mode} " if agy_mode == "plan" else ""
     prompt_str = f"{prompt_prefix}{safe_title}: {safe_details}"
 
+    # Load recorded action events / thought process logs for this recommendation title
+    action_history = []
+    try:
+        log_file = os.path.expanduser("~/.config/jules/agy_actions.json")
+        if os.path.exists(log_file):
+            with open(log_file, "r") as f:
+                all_actions = json.load(f)
+                for sid, events in all_actions.items():
+                    for ev in events:
+                        if ev.get("title", "") == title or sid == title:
+                            action_history.append(ev)
+        action_history.sort(key=lambda x: x.get("timestamp_epoch", 0))
+    except Exception:
+        pass
+
     while True:
         height, width = stdscr.getmaxyx()
         stdscr.clear()
 
-        header = " 🔍 RECOMMENDATION DETAILS INSPECTOR "
+        header = " 🔍 TASK & RECOMMENDATION DETAILS INSPECTOR "
         stdscr.attron(curses.color_pair(5) | curses.A_BOLD)
         stdscr.addstr(0, 0, header[:width].center(width))
         stdscr.attroff(curses.color_pair(5) | curses.A_BOLD)
 
-        footer_tips = "Keybindings: [c] copy details | [p] copy prompt | [e] copy error/status | [ESC] return"
+        footer_tips = "Keybindings: [j/k/↑/↓] scroll | [c] copy details | [p] copy prompt | [e] copy log | [ESC] return"
         stdscr.attron(curses.color_pair(1))
         stdscr.addstr(height - 1, 0, footer_tips.center(width)[:width-1])
         stdscr.attroff(curses.color_pair(1))
@@ -960,49 +978,75 @@ def prompt_suggestion_details_panel(stdscr, sug, agy_status=""):
             stdscr.addstr(height - 2, 2, status_msg[:width-4])
             stdscr.attroff(curses.color_pair(3) | curses.A_BOLD)
 
-        curr_y = 2
-        stdscr.attron(curses.color_pair(1) | curses.A_BOLD)
-        stdscr.addstr(curr_y, 2, f"📌 Title: {title}"[:width-4])
-        stdscr.attroff(curses.color_pair(1) | curses.A_BOLD)
-        curr_y += 1
-
-        stdscr.attron(curses.color_pair(1))
-        stdscr.addstr(curr_y, 2, f"📁 Target Repository: {repo}"[:width-4])
-        stdscr.attroff(curses.color_pair(1))
-        curr_y += 2
-
-        stdscr.attron(curses.color_pair(3) | curses.A_BOLD)
-        stdscr.addstr(curr_y, 2, "📝 Description & Details:")
-        stdscr.attroff(curses.color_pair(3) | curses.A_BOLD)
-        curr_y += 1
-
-        wrapped_details = textwrap.wrap(details, max(20, width - 6)) or [details]
-        for d_line in wrapped_details:
-            if curr_y < height - 5:
-                stdscr.attron(curses.color_pair(3))
-                stdscr.addstr(curr_y, 4, d_line[:width-6])
-                stdscr.attroff(curses.color_pair(3))
-                curr_y += 1
-
-        curr_y += 1
-        stdscr.attron(curses.color_pair(2) | curses.A_BOLD)
-        stdscr.addstr(curr_y, 2, "⚡ AGY Execution Prompt:")
-        stdscr.attroff(curses.color_pair(2) | curses.A_BOLD)
-        curr_y += 1
-
-        wrapped_prompt = textwrap.wrap(prompt_str, max(20, width - 6)) or [prompt_str]
-        for p_line in wrapped_prompt:
-            if curr_y < height - 5:
-                stdscr.attron(curses.color_pair(2))
-                stdscr.addstr(curr_y, 4, p_line[:width-6])
-                stdscr.attroff(curses.color_pair(2))
-                curr_y += 1
+        # Build list of display lines for scrollable view
+        display_lines = []
+        display_lines.append(("HEADER", f"📌 Title: {title}"))
+        display_lines.append(("HEADER", f"📁 Target Repository: {repo}"))
+        display_lines.append(("SPACE", ""))
+        display_lines.append(("SECTION", "📝 Description & Details:"))
+        for d_line in (textwrap.wrap(details, max(20, width - 6)) or [details]):
+            display_lines.append(("DETAIL", f"    {d_line}"))
+        display_lines.append(("SPACE", ""))
+        display_lines.append(("SECTION", "⚡ AGY Execution Prompt:"))
+        for p_line in (textwrap.wrap(prompt_str, max(20, width - 6)) or [prompt_str]):
+            display_lines.append(("PROMPT", f"    {p_line}"))
 
         if agy_status:
+            display_lines.append(("SPACE", ""))
+            display_lines.append(("STATUS", f"🚨 Current Status / Execution State: {agy_status}"))
+
+        display_lines.append(("SPACE", ""))
+        display_lines.append(("SECTION", "🧠 Thought Process & Action History Log:"))
+        if not action_history:
+            display_lines.append(("DETAIL", "    (No recorded subagent actions or API event history yet)"))
+        else:
+            for idx, ev in enumerate(action_history):
+                ts = ev.get("timestamp", "")
+                act = ev.get("action", "EVENT")
+                msg = ev.get("message", "")
+                by = ev.get("action_by", "system")
+                display_lines.append(("LOG_HEADER", f"  [{idx+1}] [{ts}] {act} (by: {by})"))
+                if msg:
+                    for m_line in (textwrap.wrap(msg, max(20, width - 10)) or [msg]):
+                        display_lines.append(("LOG_BODY", f"      ↳ {m_line}"))
+
+        max_visible = height - 4 - (1 if status_msg else 0)
+        scroll_top = max(0, min(scroll_top, max(0, len(display_lines) - max_visible)))
+
+        curr_y = 2
+        for i in range(scroll_top, len(display_lines)):
+            if curr_y >= 2 + max_visible:
+                break
+            l_type, l_text = display_lines[i]
+            if l_type == "HEADER":
+                stdscr.attron(curses.color_pair(1) | curses.A_BOLD)
+                stdscr.addstr(curr_y, 2, l_text[:width-4])
+                stdscr.attroff(curses.color_pair(1) | curses.A_BOLD)
+            elif l_type == "SECTION":
+                stdscr.attron(curses.color_pair(3) | curses.A_BOLD)
+                stdscr.addstr(curr_y, 2, l_text[:width-4])
+                stdscr.attroff(curses.color_pair(3) | curses.A_BOLD)
+            elif l_type == "DETAIL":
+                stdscr.attron(curses.color_pair(3))
+                stdscr.addstr(curr_y, 2, l_text[:width-4])
+                stdscr.attroff(curses.color_pair(3))
+            elif l_type == "PROMPT":
+                stdscr.attron(curses.color_pair(2))
+                stdscr.addstr(curr_y, 2, l_text[:width-4])
+                stdscr.attroff(curses.color_pair(2))
+            elif l_type == "STATUS":
+                stdscr.attron(curses.color_pair(6 if "ERROR" in l_text or "FAILED" in l_text else 1) | curses.A_BOLD)
+                stdscr.addstr(curr_y, 2, l_text[:width-4])
+                stdscr.attroff(curses.color_pair(6 if "ERROR" in l_text or "FAILED" in l_text else 1) | curses.A_BOLD)
+            elif l_type == "LOG_HEADER":
+                stdscr.attron(curses.color_pair(7) | curses.A_BOLD)
+                stdscr.addstr(curr_y, 2, l_text[:width-4])
+                stdscr.attroff(curses.color_pair(7) | curses.A_BOLD)
+            elif l_type == "LOG_BODY":
+                stdscr.attron(curses.color_pair(1))
+                stdscr.addstr(curr_y, 2, l_text[:width-4])
+                stdscr.attroff(curses.color_pair(1))
             curr_y += 1
-            stdscr.attron(curses.color_pair(6 if "ERROR" in agy_status or "FAILED" in agy_status else 1) | curses.A_BOLD)
-            stdscr.addstr(curr_y, 2, f"🚨 Current Status / Error: {agy_status}"[:width-4])
-            stdscr.attroff(curses.color_pair(6 if "ERROR" in agy_status or "FAILED" in agy_status else 1) | curses.A_BOLD)
 
         stdscr.refresh()
         ch = _get_key_with_mouse_wheel(stdscr)
@@ -1010,6 +1054,10 @@ def prompt_suggestion_details_panel(stdscr, sug, agy_status=""):
         if ch == 27:  # ESC
             stdscr.timeout(1000)
             return "Returned to suggestions panel."
+        elif ch in (curses.KEY_UP, ord('k')) and scroll_top > 0:
+            scroll_top -= 1
+        elif ch in (curses.KEY_DOWN, ord('j')) and scroll_top < max(0, len(display_lines) - max_visible):
+            scroll_top += 1
         elif ch in (ord('c'), ord('C')):
             if copy_to_clipboard(f"{title}\n{details}"):
                 status_msg = "📋 Copied recommendation title & description to clipboard!"
@@ -1021,9 +1069,9 @@ def prompt_suggestion_details_panel(stdscr, sug, agy_status=""):
             else:
                 status_msg = "⚠️ Clipboard tool (xclip/xsel/wl-copy) failed."
         elif ch in (ord('e'), ord('E')):
-            copy_text = agy_status or "No status/error recorded."
-            if copy_to_clipboard(copy_text):
-                status_msg = "📋 Copied error message / status to clipboard!"
+            log_summary = "\n".join([f"[{ev.get('timestamp')}] {ev.get('action')}: {ev.get('message')}" for ev in action_history]) or agy_status or "No log recorded."
+            if copy_to_clipboard(log_summary):
+                status_msg = "📋 Copied thought process log & actions to clipboard!"
             else:
                 status_msg = "⚠️ Clipboard tool (xclip/xsel/wl-copy) failed."
 
