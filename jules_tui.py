@@ -1433,10 +1433,21 @@ def main():
     if not args.no_kill:
         kill_previous_tui_instances()
 
+    log_path = os.path.expanduser("~/.config/jules/tui_debug.log")
+    os.makedirs(os.path.dirname(log_path), exist_ok=True)
+    with open(log_path, "a") as logf:
+        logf.write(f"\n--- Starting TUI session (PID: {os.getpid()}) at {time.strftime('%Y-%m-%d %H:%M:%S')} ---\n")
+
     try:
         curses.wrapper(draw_menu)
     except KeyboardInterrupt:
         pass
+    except Exception as e:
+        import traceback
+        err_msg = traceback.format_exc()
+        with open(log_path, "a") as logf:
+            logf.write(f"CRASH EXCEPTION:\n{err_msg}\n")
+        raise e
 
 if __name__ == "__main__":
     main()
