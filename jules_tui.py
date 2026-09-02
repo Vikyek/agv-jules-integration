@@ -16,13 +16,21 @@ from jules_manager import list_sessions, get_session_activities, send_message, a
 CONFIG_FILE = os.path.expanduser("~/.config/jules/config.json")
 
 def load_config():
+    default_cfg = {
+        "mode": "continuous",
+        "interval": 60,
+        "agy_mode": "plan",
+        "agy_skip_permissions": True
+    }
     if os.path.exists(CONFIG_FILE):
         try:
             with open(CONFIG_FILE, "r") as f:
-                return json.load(f)
+                loaded = json.load(f)
+                default_cfg.update(loaded)
+                return default_cfg
         except Exception:
             pass
-    return {"mode": "continuous", "interval": 60}
+    return default_cfg
 
 def save_config(cfg):
     os.makedirs(os.path.dirname(CONFIG_FILE), exist_ok=True)
@@ -420,10 +428,12 @@ def draw_menu(stdscr):
         stdscr.attroff(header_color)
 
         # Mode line (Centered) - Service Disabled / Stopped shown in Red
+        agy_mode_val = cfg.get('agy_mode', 'plan').upper()
+        agy_perm_val = "SKIP-PERMS ⚡" if cfg.get('agy_skip_permissions', True) else "PROMPT-PERMS 🔒"
         if width < 80:
-            mode_str = f"Svc:[{svc_str} {listen_icon}] Auto:[{auto_str[:3]}]"
+            mode_str = f"Svc:[{svc_str} {listen_icon}] AGY:[{agy_mode_val}]"
         else:
-            mode_str = f"Mode: [{cfg.get('mode', 'continuous').upper()}] | Service: [{svc_str} {listen_icon}] | Autostart: [{auto_str}]"
+            mode_str = f"Mode: [{cfg.get('mode', 'continuous').upper()}] | AGY: [{agy_mode_val}] | Perms: [{agy_perm_val}] | Svc: [{svc_str} {listen_icon}]"
             
         mode_color = curses.color_pair(6) | curses.A_BOLD if not svc_active else curses.color_pair(1) | curses.A_BOLD
         stdscr.attron(mode_color)
@@ -437,9 +447,9 @@ def draw_menu(stdscr):
 
         # Multi-line footer keybindings bar wrapping calculation (using non-breaking spaces \\u00A0 between keybind badge and label)
         if width < 80:
-            raw_tips = f"[s]\u00A0{'stop' if svc_active else 'start'} | [u]\u00A0unstuck | [g]\u00A0suggestions | [b]\u00A0auto | [p]\u00A0open\u00A0PR | [w]\u00A0Jules\u00A0web\u00A0UI | [h]\u00A0history | [v]\u00A0archived | [q]\u00A0quit"
+            raw_tips = f"[s]\u00A0{'stop' if svc_active else 'start'} | [u]\u00A0unstuck | [g]\u00A0suggestions | [o]\u00A0agy-mode | [d]\u00A0perms | [b]\u00A0auto | [p]\u00A0open\u00A0PR | [w]\u00A0Jules\u00A0web\u00A0UI | [h]\u00A0history | [v]\u00A0archived | [q]\u00A0quit"
         else:
-            raw_tips = f"Keybindings: [s]\u00A0{'stop' if svc_active else 'start'}\u00A0service | [u]\u00A0unstuck\u00A0session | [g]\u00A0suggestions | [b]\u00A0autostart | [p]\u00A0open\u00A0PR | [w]\u00A0Jules\u00A0web\u00A0UI | [h]\u00A0history\u00A0log | [v]\u00A0archived\u00A0collection | [q]\u00A0quit"
+            raw_tips = f"Keybindings: [s]\u00A0{'stop' if svc_active else 'start'}\u00A0service | [u]\u00A0unstuck\u00A0session | [g]\u00A0suggestions | [o]\u00A0AGY\u00A0mode | [d]\u00A0AGY\u00A0perms | [b]\u00A0autostart | [p]\u00A0open\u00A0PR | [w]\u00A0Jules\u00A0web\u00A0UI | [h]\u00A0history\u00A0log | [v]\u00A0archived\u00A0collection | [q]\u00A0quit"
 
         raw_footer_lines = textwrap.wrap(raw_tips, max(20, width - 4)) or [raw_tips]
         footer_lines = [l.strip().lstrip("|").rstrip("|").strip() for l in raw_footer_lines]
@@ -689,6 +699,19 @@ def draw_menu(stdscr):
             cfg["mode"] = nxt
             save_config(cfg)
             action_msg = f"Listener mode updated to: {nxt.upper()}"
+        elif key in (ord('o'), ord('O')):
+            agy_modes = ["plan", "accept-edits"]
+            curr_agy = cfg.get("agy_mode", "plan")
+            nxt_agy = agy_modes[(agy_modes.index(curr_agy) + 1) % len(agy_modes)]
+            cfg["agy_mode"] = nxt_agy
+            save_config(cfg)
+            action_msg = f"AGY execution mode updated to: {nxt_agy.upper()}"
+        elif key in (ord('d'), ord('D')):
+            curr_skip = cfg.get("agy_skip_permissions", True)
+            nxt_skip = not curr_skip
+            cfg["agy_skip_permissions"] = nxt_skip
+            save_config(cfg)
+            action_msg = f"AGY dangerously_skip_permissions updated to: {'ENABLED' if nxt_skip else 'DISABLED'}"
         elif key in (ord('a'), ord('A')) and sessions_cache:
             if prompt_confirm(stdscr, f"Archive session #{selected_idx + 1}?"):
                 curr_s = sessions_cache[selected_idx]
@@ -839,10 +862,17 @@ def prompt_suggestions_panel(stdscr):
                                 task_title = curr_sug.get("title", "")
                                 task_details = curr_sug.get("details", "")
                                 repo_name = curr_sug.get("repo", "Vikyek/paru-wrapper")
-                                prompt_str = f"/plan {task_title}: {task_details} in {repo_name}"
+                                cfg = load_config()
+                                agy_mode = cfg.get("agy_mode", "plan")
+                                skip_perms = cfg.get("agy_skip_permissions", True)
+                                prompt_prefix = f"/{agy_mode} " if agy_mode == "plan" else ""
+                                prompt_str = f"{prompt_prefix}{task_title}: {task_details} in {repo_name}"
+                                flags = f"--mode {agy_mode}"
+                                if skip_perms:
+                                    flags += " --dangerously-skip-permissions"
                                 import subprocess
-                                subprocess.Popen(["i3-msg", f"exec --no-startup-id /usr/sbin/kitty --title 'AGY - {task_title[:20]}' -e /usr/sbin/agy -i '{prompt_str}'"])
-                                status_msg = f"🚀 Launched interactive AGY /plan window for suggestion #{selected_idx + 1}"
+                                subprocess.Popen(["i3-msg", f"exec --no-startup-id /usr/sbin/kitty --title 'AGY - {task_title[:20]}' -e /usr/sbin/agy {flags} -i '{prompt_str}'"])
+                                status_msg = f"🚀 Launched interactive AGY ({agy_mode}) window for suggestion #{selected_idx + 1}"
                             else:
                                 selected_idx = idx_item
                             break
@@ -861,13 +891,22 @@ def prompt_suggestions_panel(stdscr):
             task_details = curr_sug.get("details", "")
             repo_name = curr_sug.get("repo", "Vikyek/paru-wrapper")
             
-            prompt_str = f"/plan {task_title}: {task_details} in {repo_name}"
-            # Spawn interactive terminal window running AGY with -i / --prompt-interactive
+            cfg = load_config()
+            agy_mode = cfg.get("agy_mode", "plan")
+            skip_perms = cfg.get("agy_skip_permissions", True)
+            
+            prompt_prefix = f"/{agy_mode} " if agy_mode == "plan" else ""
+            prompt_str = f"{prompt_prefix}{task_title}: {task_details} in {repo_name}"
+            
+            flags = f"--mode {agy_mode}"
+            if skip_perms:
+                flags += " --dangerously-skip-permissions"
+
             try:
                 import subprocess
-                cmd = ["i3-msg", f"exec --no-startup-id /usr/sbin/kitty --title 'AGY - {task_title[:20]}' -e /usr/sbin/agy -i '{prompt_str}'"]
+                cmd = ["i3-msg", f"exec --no-startup-id /usr/sbin/kitty --title 'AGY - {task_title[:20]}' -e /usr/sbin/agy {flags} -i '{prompt_str}'"]
                 subprocess.Popen(cmd)
-                status_msg = f"🚀 Launched interactive AGY /plan window for suggestion #{selected_idx + 1}"
+                status_msg = f"🚀 Launched interactive AGY ({agy_mode}) window for suggestion #{selected_idx + 1}"
             except Exception as e:
                 status_msg = f"Error launching AGY window: {e}"
         elif ch in (ord('j'), ord('J')) and suggestions:
