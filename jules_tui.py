@@ -1135,7 +1135,14 @@ def prompt_suggestions_panel(stdscr, preloaded_suggestions=None):
                         break
             last_sort_time = now_t + 999999.0  # Prevent constant re-sorting until next status mutation
 
-        header = " 💡 JUL̇ES PROACTIVE TASK SUGGESTIONS "
+        # Calculate active (uncompleted) suggestion count
+        active_count = len([
+            s for s in suggestions
+            if s.get("title", "").strip() not in dismissed_set
+            and agy_task_status.get(s.get("title", "")) not in ("COMPLETED ✅", "VERIFIED DONE ✅")
+        ])
+
+        header = f" 💡 JUL̇ES PROACTIVE TASK SUGGESTIONS ({active_count} ACTIVE) "
         stdscr.attron(curses.color_pair(5) | curses.A_BOLD)
         stdscr.addstr(0, 0, header[:width].center(width))
         stdscr.attroff(curses.color_pair(5) | curses.A_BOLD)
