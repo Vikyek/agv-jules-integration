@@ -1195,7 +1195,9 @@ def prompt_suggestions_panel(stdscr, preloaded_suggestions=None):
                         stdscr.attroff(curses.color_pair(1))
 
                 curr_y += 1
-                if details:
+                is_completed_or_verified = agy_task_status.get(title) in ("COMPLETED ✅", "VERIFIED DONE ✅")
+                # Collapse (hide) details description under completed tasks unless selected
+                if details and (not is_completed_or_verified or i == selected_idx):
                     wrapped_details = textwrap.wrap(f"↳ {details}", max(20, width - 8)) or [f"↳ {details}"]
                     for d_idx, d_line in enumerate(wrapped_details):
                         if 0 <= curr_y < height - 2:
