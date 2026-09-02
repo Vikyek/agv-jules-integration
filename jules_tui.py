@@ -807,11 +807,11 @@ def prompt_suggestions_panel(stdscr):
         # Do not filter out dismissed suggestions so completed items stay visible until explicit refresh [r]
         suggestions = fetch_jules_suggestions(filter_dismissed=False)
 
-        long_sug_tips = "Keybindings: [g] start AGY | [c] check if done | [j] start Jules | [r] refresh | [x] dismiss | [ESC] return"
+        long_sug_tips = "Keybindings: [g] start AGY | [a] start all | [c] check if done | [j] start Jules | [r] refresh | [x] dismiss | [ESC] return"
         if len(long_sug_tips) <= width - 2:
             footer_tips = long_sug_tips
         else:
-            footer_tips = "[g] start AGY | [c] check if done | [j] start Jules | [r] refresh | [x] dismiss | [ESC] return"
+            footer_tips = "[g] start AGY | [a] start all | [c] check if done | [j] start Jules | [r] refresh | [x] dismiss | [ESC] return"
         stdscr.attron(curses.color_pair(1))
         stdscr.addstr(height - 1, 0, footer_tips.center(width)[:width-1])
         stdscr.attroff(curses.color_pair(1))
@@ -990,6 +990,50 @@ def prompt_suggestions_panel(stdscr):
 
             threading.Thread(target=check_agy_task, args=(task_title, check_prompt, flags, repo_name), daemon=True).start()
             status_msg = f"🔍 Started non-blocking AGY verification check for suggestion #{selected_idx + 1}"
+        elif ch in (ord('a'), ord('A')) and suggestions:
+            cfg = load_config()
+            agy_mode = cfg.get("agy_mode", "plan")
+            skip_perms = cfg.get("agy_skip_permissions", True)
+            from jules_scraper import load_dismissed_suggestions
+            dismissed_set = load_dismissed_suggestions()
+
+            active_sugs = [s for s in suggestions if s.get("title", "").strip() not in dismissed_set]
+
+            if prompt_confirm(stdscr, f"Start all ({len(active_sugs)}) pending suggestions?"):
+                for sug in active_sugs:
+                    t_title = sug.get("title", "")
+                    t_details = sug.get("details", "")
+                    r_name = sug.get("repo", "Vikyek/paru-wrapper")
+
+                    s_title = t_title.replace("'", "").replace('"', "")
+                    s_details = t_details.replace("'", "").replace('"', "")
+                    p_prefix = f"/{agy_mode} " if agy_mode == "plan" else ""
+                    p_str = f"{p_prefix}{s_title}: {s_details} in {r_name}"
+                    flgs = f"--mode {agy_mode}"
+                    if skip_perms:
+                        flgs += " --dangerously-skip-permissions"
+
+                    def run_batch_agy(t, p, f, r):
+                        agy_task_status[t] = "RUNNING"
+                        try:
+                            import shlex
+                            cmd_args = ["/usr/sbin/agy"] + shlex.split(f) + ["-p", p]
+                            res = subprocess.run(cmd_args, capture_output=True, text=True)
+                            if res.returncode == 0:
+                                from jules_scraper import dismiss_suggestion
+                                dismiss_suggestion(t)
+                                agy_task_status[t] = "COMPLETED ✅"
+                                log_action_event(t, r, "main", "AGY_BATCH_SUGGESTION_RUN")
+                            else:
+                                agy_task_status[t] = f"FAILED ✖ (code {res.returncode})"
+                        except Exception as e:
+                            agy_task_status[t] = f"ERROR 🚨 ({e})"
+
+                    threading.Thread(target=run_batch_agy, args=(t_title, p_str, flgs, r_name), daemon=True).start()
+
+                status_msg = f"🚀 Started non-blocking batch execution for {len(active_sugs)} suggestions!"
+            else:
+                status_msg = "Cancelled batch execution."
         elif ch in (ord('r'), ord('R')):
             from jules_scraper import load_dismissed_suggestions
             status_msg = "🔄 Refreshed proactive suggestions list."
