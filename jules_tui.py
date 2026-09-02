@@ -808,15 +808,15 @@ def prompt_suggestions_panel(stdscr):
         # Do not filter out dismissed suggestions so completed items stay visible until explicit refresh [r]
         suggestions = fetch_jules_suggestions(filter_dismissed=False)
 
-        long_sug_tips = f"Keybindings: [a] select all | [space] toggle | [g] start AGY ({len(selected_set)}) | [c] check | [j] Jules | [r] refresh | [x] dismiss | [ESC] return"
+        long_sug_tips = f"Keybindings: [a] select all | [space] toggle | [g] start AGY ({len(selected_set)}) | [c] check | [j] Jules | [h] history | [v] archived | [r] refresh | [x] dismiss | [ESC] return"
         if len(long_sug_tips) <= width - 4:
             raw_sug_tips = long_sug_tips
         else:
-            nokey_tips = f"[a]\u00A0select\u00A0all | [space]\u00A0toggle | [g]\u00A0start\u00A0({len(selected_set)}) | [c]\u00A0check | [j]\u00A0Jules | [r]\u00A0refresh | [x]\u00A0dismiss | [ESC]\u00A0return"
+            nokey_tips = f"[a]\u00A0select\u00A0all | [space]\u00A0toggle | [g]\u00A0start\u00A0({len(selected_set)}) | [c]\u00A0check | [j]\u00A0Jules | [h]\u00A0history | [v]\u00A0archived | [r]\u00A0refresh | [x]\u00A0dismiss | [ESC]\u00A0return"
             if len(nokey_tips) <= width - 4:
                 raw_sug_tips = nokey_tips
             else:
-                raw_sug_tips = f"[a]\u00A0all | [spc]\u00A0sel | [g]\u00A0agy\u00A0({len(selected_set)}) | [c]\u00A0chk | [j]\u00A0jules | [r]\u00A0ref | [x]\u00A0dis | [ESC]\u00A0ret"
+                raw_sug_tips = f"[a]\u00A0all | [spc]\u00A0sel | [g]\u00A0agy\u00A0({len(selected_set)}) | [c]\u00A0chk | [j]\u00A0jules | [h]\u00A0hist | [v]\u00A0arch | [r]\u00A0ref | [x]\u00A0dis | [ESC]\u00A0ret"
 
         raw_sug_lines = textwrap.wrap(raw_sug_tips, max(20, width - 4)) or [raw_sug_tips]
         sug_footer_lines = [l.strip().lstrip("|").rstrip("|").strip() for l in raw_sug_lines]
@@ -879,19 +879,24 @@ def prompt_suggestions_panel(stdscr):
                         stdscr.attroff(curses.color_pair(1))
 
                 curr_y += 1
-                if details and 0 <= curr_y < height - 2:
-                    detail_line = f"       ↳ {details}"[:width-4]
-                    stdscr.attron(curses.color_pair(3 if i != selected_idx else 5))
-                    stdscr.addstr(curr_y, 1, detail_line)
-                    stdscr.attroff(curses.color_pair(3 if i != selected_idx else 5))
-                    curr_y += 1
-                elif details:
-                    curr_y += 1
+                if details:
+                    import textwrap
+                    wrapped_details = textwrap.wrap(f"↳ {details}", max(20, width - 8)) or [f"↳ {details}"]
+                    for d_idx, d_line in enumerate(wrapped_details):
+                        if 0 <= curr_y < height - 2:
+                            prefix_space = "       " if d_idx == 0 else "         "
+                            full_d_line = f"{prefix_space}{d_line}"[:width-4]
+                            stdscr.attron(curses.color_pair(3 if i != selected_idx else 5))
+                            stdscr.addstr(curr_y, 1, full_d_line)
+                            stdscr.attroff(curses.color_pair(3 if i != selected_idx else 5))
+                            curr_y += 1
+                        else:
+                            curr_y += 1
 
                 from jules_scraper import load_dismissed_suggestions
                 dismissed_set = load_dismissed_suggestions()
 
-                if agy_task_status.get(title) and 0 <= curr_y < height - 2:
+                if agy_task_status.get(title):
                     raw_info = agy_task_status[title]
                     if raw_info == "RUNNING":
                         status_info = f"RUNNING {spin_char}"
@@ -900,18 +905,23 @@ def prompt_suggestions_panel(stdscr):
                     else:
                         status_info = raw_info
 
-                    status_line = f"       ⚡ AGY Task Status: [{status_info}]"[:width-4]
-                    stdscr.attron(curses.color_pair(3 if "ERROR" in status_info or "FAILED" in status_info else (2 if "DONE" in status_info or "COMPLETED" in status_info else 1)))
-                    stdscr.addstr(curr_y, 1, status_line)
-                    stdscr.attroff(curses.color_pair(3 if "ERROR" in status_info or "FAILED" in status_info else (2 if "DONE" in status_info or "COMPLETED" in status_info else 1)))
-                    curr_y += 1
+                    import textwrap
+                    wrapped_status = textwrap.wrap(f"⚡ AGY Task Status: [{status_info}]", max(20, width - 8)) or [f"⚡ AGY Task Status: [{status_info}]"]
+                    for s_idx, s_line in enumerate(wrapped_status):
+                        if 0 <= curr_y < height - 2:
+                            prefix_space = "       " if s_idx == 0 else "         "
+                            full_s_line = f"{prefix_space}{s_line}"[:width-4]
+                            stdscr.attron(curses.color_pair(3 if "ERROR" in status_info or "FAILED" in status_info else (2 if "DONE" in status_info or "COMPLETED" in status_info else 1)))
+                            stdscr.addstr(curr_y, 1, full_s_line)
+                            stdscr.attroff(curses.color_pair(3 if "ERROR" in status_info or "FAILED" in status_info else (2 if "DONE" in status_info or "COMPLETED" in status_info else 1)))
+                            curr_y += 1
+                        else:
+                            curr_y += 1
                 elif title.strip() in dismissed_set and 0 <= curr_y < height - 2:
                     status_line = "       ⚡ AGY Task Status: [COMPLETED ✅]"[:width-4]
                     stdscr.attron(curses.color_pair(2))
                     stdscr.addstr(curr_y, 1, status_line)
                     stdscr.attroff(curses.color_pair(2))
-                    curr_y += 1
-                elif agy_task_status.get(title):
                     curr_y += 1
 
                 end_y = curr_y - 1
@@ -1157,6 +1167,12 @@ def prompt_suggestions_panel(stdscr):
                 status_msg = f"🗑️ Dismissed suggestion #{selected_idx + 1}"
             else:
                 status_msg = "Cancelled dismissal."
+        elif ch in (ord('h'), ord('H')):
+            prompt_action_history_panel(stdscr)
+            status_msg = "Returned from Global Action History log."
+        elif ch in (ord('v'), ord('V')):
+            prompt_archived_sessions_panel(stdscr)
+            status_msg = "Returned from Archived Sessions collection."
         elif ch in (ord('j'), ord('J')) and suggestions:
             curr_sug = suggestions[selected_idx]
             task_title = curr_sug.get("title", "")
