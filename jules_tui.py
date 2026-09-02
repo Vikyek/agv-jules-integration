@@ -69,7 +69,7 @@ def draw_menu(stdscr):
 
     listen_frames = ["📡", "🛰️", "⚡", "✨"]
     swirl_frames = ["🌀", "🔄", "💫", "✨"]
-    braille_swirl = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
+    braille_swirl = ["⣾", "⣽", "⣻", "⢿", "⡿", "⣟", "⣯", "⣷"]
 
     view_archived = False
 
@@ -627,9 +627,13 @@ def prompt_reply(stdscr, session_id, local_num, preloaded_data=None):
         if title_str:
             q_lines.extend(textwrap.wrap(f"Title: {title_str}", max_line_width))
             
+        state_str = sess.get("state", "RUNNING")
+        braille_swirl = ["⣾", "⣽", "⣻", "⢿", "⡿", "⣟", "⣯", "⣷"]
+        curr_spin = braille_swirl[int(time.time() * 8) % len(braille_swirl)]
+        
         prompt_raw = sess.get("prompt", "")
         if prompt_raw:
-            q_lines.append("--- Original Task Prompt ---")
+            q_lines.append(f"--- Original Task Prompt [{state_str} {curr_spin}] ---")
             for pl in prompt_raw.splitlines()[:4]:
                 q_lines.extend(textwrap.wrap(pl, max_line_width) or [""])
 
