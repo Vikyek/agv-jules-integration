@@ -1376,9 +1376,21 @@ def prompt_suggestions_panel(stdscr, preloaded_suggestions=None):
             else:
                 status_msg = "Cancelled batch execution."
         elif ch in (ord('r'), ord('R')):
+            from jules_scraper import dismiss_suggestion, load_dismissed_suggestions, fetch_jules_suggestions
+            # Auto-archive any completed/verified suggestions currently visible
+            auto_archived_count = 0
+            for sug in suggestions:
+                t_title = sug.get("title", "")
+                st = agy_task_status.get(t_title, "")
+                if ("COMPLETED" in st or "VERIFIED" in st or "DONE" in st) and t_title:
+                    dismiss_suggestion(t_title)
+                    auto_archived_count += 1
             suggestions = fetch_jules_suggestions(filter_dismissed=False)
             dismissed_set = load_dismissed_suggestions()
-            status_msg = "🔄 Refreshed proactive suggestions list."
+            if auto_archived_count > 0:
+                status_msg = f"🔄 Refreshed list & auto-archived {auto_archived_count} completed suggestion(s)!"
+            else:
+                status_msg = "🔄 Refreshed proactive suggestions list."
         elif ch in (ord('x'), ord('X')) and suggestions:
             curr_sug = suggestions[selected_idx]
             task_title = curr_sug.get("title", "")
