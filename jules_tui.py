@@ -531,7 +531,11 @@ def draw_menu(stdscr):
         stdscr.timeout(150)
         key = stdscr.getch()
 
-        if key == curses.KEY_MOUSE:
+        if key == curses.KEY_RESIZE:
+            curses.update_lines_cols()
+            stdscr.clear()
+            continue
+        elif key == curses.KEY_MOUSE:
             try:
                 _, mx, my, _, bstate = curses.getmouse()
                 if my == 1:
