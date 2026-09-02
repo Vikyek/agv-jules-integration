@@ -782,6 +782,7 @@ def prompt_suggestions_panel(stdscr):
     stdscr.timeout(-1)
     selected_idx = 0
     status_msg = ""
+    agy_task_status = {}
 
     while True:
         height, width = stdscr.getmaxyx()
@@ -842,10 +843,19 @@ def prompt_suggestions_panel(stdscr):
                     stdscr.addstr(curr_y, 1, detail_line)
                     stdscr.attroff(curses.color_pair(7 if i != selected_idx else 5))
                     curr_y += 1
+                if agy_task_status.get(title):
+                    status_info = agy_task_status[title]
+                    status_line = f"     ⚡ AGY Task Status: [{status_info}]"[:width-4]
+                    stdscr.attron(curses.color_pair(3 if "ERROR" in status_info or "FAILED" in status_info else 1))
+                    stdscr.addstr(curr_y, 1, status_line)
+                    stdscr.attroff(curses.color_pair(3 if "ERROR" in status_info or "FAILED" in status_info else 1))
+                    curr_y += 1
+
                 end_y = curr_y - 1
                 sug_row_map[i] = (start_y, end_y)
 
         stdscr.refresh()
+        stdscr.timeout(200)
         ch = stdscr.getch()
 
         if ch == curses.KEY_MOUSE:
@@ -854,37 +864,16 @@ def prompt_suggestions_panel(stdscr):
                 if not (bstate & (curses.BUTTON1_CLICKED | curses.BUTTON1_RELEASED)):
                     continue
                 if my == height - 1:
-                    # Footer click -> return to main menu
                     stdscr.timeout(1000)
                     return "Returned to active sessions."
                 else:
                     for idx_item, (sy, ey) in sug_row_map.items():
                         if sy <= my <= ey:
-                            if selected_idx == idx_item:
-                                # Second click on same item -> launch interactive AGY window
-                                curr_sug = suggestions[selected_idx]
-                                task_title = curr_sug.get("title", "")
-                                task_details = curr_sug.get("details", "")
-                                repo_name = curr_sug.get("repo", "Vikyek/paru-wrapper")
-                                cfg = load_config()
-                                agy_mode = cfg.get("agy_mode", "plan")
-                                skip_perms = cfg.get("agy_skip_permissions", True)
-                                prompt_prefix = f"/{agy_mode} " if agy_mode == "plan" else ""
-                                prompt_str = f"{prompt_prefix}{task_title}: {task_details} in {repo_name}"
-                                flags = f"--mode {agy_mode}"
-                                if skip_perms:
-                                    flags += " --dangerously-skip-permissions"
-                                escaped_title = task_title.replace("'", "\\'")
-                                runner_bin = os.path.expanduser("~/.local/bin/jules-suggestion-runner")
-                                import subprocess
-                                subprocess.Popen(["i3-msg", f"exec --no-startup-id /usr/sbin/kitty --title 'AGY - {task_title[:20]}' {runner_bin} '{task_title}' run '{prompt_str}' '{flags}'"])
-                                status_msg = f"🚀 Launched non-interactive AGY ({agy_mode}) task for suggestion #{selected_idx + 1}"
-                            else:
-                                selected_idx = idx_item
+                            selected_idx = idx_item
                             break
             except Exception:
                 pass
-        elif ch == 27:  # ESC key
+        elif ch == 27:
             stdscr.timeout(1000)
             return "Returned to active sessions."
         elif ch == curses.KEY_UP and selected_idx > 0:
@@ -911,14 +900,21 @@ def prompt_suggestions_panel(stdscr):
             if skip_perms:
                 flags += " --dangerously-skip-permissions"
 
-            try:
-                import subprocess
-                runner_bin = os.path.expanduser("~/.local/bin/jules-suggestion-runner")
-                cmd = ["i3-msg", f'exec --no-startup-id /usr/sbin/kitty --title "AGY Task" {runner_bin} "{safe_title}" run "{prompt_str}" "{flags}"']
-                subprocess.Popen(cmd)
-                status_msg = f"🚀 Launched non-interactive AGY ({agy_mode}) task for suggestion #{selected_idx + 1}"
-            except Exception as e:
-                status_msg = f"Error launching AGY window: {e}"
+            def run_agy_task(title, prompt, flg):
+                agy_task_status[title] = "RUNNING ⏳"
+                try:
+                    res = subprocess.run(f"/usr/sbin/agy {flg} -p \"{prompt}\"", shell=True, capture_output=True, text=True)
+                    if res.returncode == 0:
+                        from jules_scraper import dismiss_suggestion
+                        dismiss_suggestion(title)
+                        agy_task_status[title] = "COMPLETED ✅"
+                    else:
+                        agy_task_status[title] = f"FAILED ✖ (code {res.returncode})"
+                except Exception as e:
+                    agy_task_status[title] = f"ERROR 🚨 ({e})"
+
+            threading.Thread(target=run_agy_task, args=(task_title, prompt_str, flags), daemon=True).start()
+            status_msg = f"🚀 Started non-blocking AGY ({agy_mode}) task for suggestion #{selected_idx + 1}"
         elif ch in (ord('c'), ord('C')) and suggestions:
             curr_sug = suggestions[selected_idx]
             task_title = curr_sug.get("title", "")
@@ -935,14 +931,21 @@ def prompt_suggestions_panel(stdscr):
             if skip_perms:
                 flags += " --dangerously-skip-permissions"
 
-            try:
-                import subprocess
-                runner_bin = os.path.expanduser("~/.local/bin/jules-suggestion-runner")
-                cmd = ["i3-msg", f'exec --no-startup-id /usr/sbin/kitty --title "AGY Check" {runner_bin} "{safe_title}" check "{check_prompt}" "{flags}"']
-                subprocess.Popen(cmd)
-                status_msg = f"🔍 Launched AGY verification check for suggestion #{selected_idx + 1}"
-            except Exception as e:
-                status_msg = f"Error launching AGY check window: {e}"
+            def check_agy_task(title, prompt, flg):
+                agy_task_status[title] = "VERIFYING 🔍"
+                try:
+                    res = subprocess.run(f"/usr/sbin/agy {flg} -p \"{prompt}\"", shell=True, capture_output=True, text=True)
+                    if "SUCCESS" in res.stdout.upper():
+                        from jules_scraper import dismiss_suggestion
+                        dismiss_suggestion(title)
+                        agy_task_status[title] = "VERIFIED DONE ✅"
+                    else:
+                        agy_task_status[title] = "INCOMPLETE ℹ️"
+                except Exception as e:
+                    agy_task_status[title] = f"ERROR 🚨 ({e})"
+
+            threading.Thread(target=check_agy_task, args=(task_title, check_prompt, flags), daemon=True).start()
+            status_msg = f"🔍 Started non-blocking AGY verification check for suggestion #{selected_idx + 1}"
         elif ch in (ord('r'), ord('R')):
             status_msg = "🔄 Refreshed proactive suggestions list."
         elif ch in (ord('x'), ord('X')) and suggestions:
