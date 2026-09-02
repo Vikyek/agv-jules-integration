@@ -609,7 +609,7 @@ def draw_menu(stdscr):
 
                 # Draw wrapped title lines indented under the title column
                 for extra_line in wrapped_title[1:]:
-                    if curr_y >= 5 + available_height:
+                    if curr_y >= max_y:
                         break
                     indented_line = f"{' ' * meta_len}{extra_line}"[:width-2]
                     if i == selected_idx:
