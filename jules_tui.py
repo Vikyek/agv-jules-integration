@@ -300,6 +300,7 @@ def draw_menu(stdscr):
         curses.init_pair(4, curses.COLOR_RED, curses.COLOR_YELLOW) # Topbar: Yellow background with Red text
         curses.init_pair(5, curses.COLOR_BLACK, curses.COLOR_YELLOW) # Highlighted selection: Yellow background with Black text
         curses.init_pair(6, curses.COLOR_BLACK, curses.COLOR_RED)    # Unresolvable / Critical Alert: Red background with Black text
+        curses.init_pair(7, curses.COLOR_CYAN, -1)             # Cyan text (Suggestions / Details)
     except Exception:
         try:
             curses.init_pair(1, curses.COLOR_YELLOW, curses.COLOR_BLACK)
@@ -308,6 +309,7 @@ def draw_menu(stdscr):
             curses.init_pair(4, curses.COLOR_RED, curses.COLOR_YELLOW)
             curses.init_pair(5, curses.COLOR_BLACK, curses.COLOR_YELLOW)
             curses.init_pair(6, curses.COLOR_BLACK, curses.COLOR_RED)
+            curses.init_pair(7, curses.COLOR_CYAN, curses.COLOR_BLACK)
         except Exception:
             pass
 
@@ -809,9 +811,9 @@ def prompt_suggestions_panel(stdscr):
                 curr_y += 1
                 if details:
                     detail_line = f"     ↳ {details}"[:width-4]
-                    stdscr.attron(curses.color_pair(2 if i != selected_idx else 5))
+                    stdscr.attron(curses.color_pair(7 if i != selected_idx else 5))
                     stdscr.addstr(curr_y, 1, detail_line)
-                    stdscr.attroff(curses.color_pair(2 if i != selected_idx else 5))
+                    stdscr.attroff(curses.color_pair(7 if i != selected_idx else 5))
                     curr_y += 1
 
         stdscr.refresh()
