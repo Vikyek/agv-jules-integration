@@ -11,6 +11,7 @@ import sys
 import json
 import time
 import subprocess
+import threading
 from jules_manager import list_sessions, get_session_activities, send_message, archive_session, _make_request
 
 CONFIG_FILE = os.path.expanduser("~/.config/jules/config.json")
