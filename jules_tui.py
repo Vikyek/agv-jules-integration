@@ -993,13 +993,17 @@ def prompt_suggestions_panel(stdscr):
     Displays a dedicated full-screen Jules Suggestions panel displaying all scraped class="suggestion-info" elements.
     Gives options to launch task in AGY (/plan) with context payload or spawn in Jules API.
     """
-    from jules_scraper import fetch_jules_suggestions
+    from jules_scraper import fetch_jules_suggestions, load_dismissed_suggestions
     stdscr.timeout(-1)
     selected_idx = 0
     selected_set = set()
     status_msg = ""
     spinner_frames = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
     spin_idx = 0
+
+    # Cache suggestions & dismissed set initially so keypress/render loops run at 60+ FPS instantly
+    suggestions = fetch_jules_suggestions(filter_dismissed=False)
+    dismissed_set = load_dismissed_suggestions()
 
     while True:
         height, width = stdscr.getmaxyx()
@@ -1011,9 +1015,6 @@ def prompt_suggestions_panel(stdscr):
         stdscr.attron(curses.color_pair(5) | curses.A_BOLD)
         stdscr.addstr(0, 0, header[:width].center(width))
         stdscr.attroff(curses.color_pair(5) | curses.A_BOLD)
-
-        # Do not filter out dismissed suggestions so completed items stay visible until explicit refresh [r]
-        suggestions = fetch_jules_suggestions(filter_dismissed=False)
 
         # Multi-line footer keybindings bar wrapping calculation (using non-breaking spaces \u00A0 between keybind badge and label)
         long_sug_tips = f"Keybindings: [a] select all | [space] toggle | [i] inspect details | [g] start AGY ({len(selected_set)}) | [c] check | [j] Jules | [h] history | [v] archived | [r] refresh | [x] dismiss | [ESC] return"
@@ -1100,9 +1101,6 @@ def prompt_suggestions_panel(stdscr):
                         else:
                             curr_y += 1
 
-                from jules_scraper import load_dismissed_suggestions
-                dismissed_set = load_dismissed_suggestions()
-
                 if agy_task_status.get(title):
                     raw_info = agy_task_status[title]
                     if raw_info == "RUNNING":
@@ -1134,7 +1132,7 @@ def prompt_suggestions_panel(stdscr):
                 sug_row_map[i] = (start_y, end_y)
 
         stdscr.refresh()
-        stdscr.timeout(150)
+        stdscr.timeout(50)
         ch = stdscr.getch()
 
         if ch == curses.KEY_MOUSE:
@@ -1189,7 +1187,6 @@ def prompt_suggestions_panel(stdscr):
             prompt_suggestion_details_panel(stdscr, curr_sug, agy_status=curr_status)
             status_msg = f"Returned from details inspector for suggestion #{selected_idx + 1}"
         elif ch in (ord('a'), ord('A')) and suggestions:
-            from jules_scraper import load_dismissed_suggestions
             dismissed_set = load_dismissed_suggestions()
             active_indices = [
                 i for i, s in enumerate(suggestions)
@@ -1203,7 +1200,6 @@ def prompt_suggestions_panel(stdscr):
                 selected_set = set(active_indices)
                 status_msg = f"✅ Selected all ({len(selected_set)}) active suggestions."
         elif ch in (ord('g'), ord('G'), curses.KEY_ENTER, 10, 13) and suggestions:
-            from jules_scraper import load_dismissed_suggestions
             dismissed_set = load_dismissed_suggestions()
 
             target_indices = list(selected_set) if selected_set else [selected_idx]
@@ -1317,7 +1313,8 @@ def prompt_suggestions_panel(stdscr):
             else:
                 status_msg = "Cancelled batch execution."
         elif ch in (ord('r'), ord('R')):
-            from jules_scraper import load_dismissed_suggestions
+            suggestions = fetch_jules_suggestions(filter_dismissed=False)
+            dismissed_set = load_dismissed_suggestions()
             status_msg = "🔄 Refreshed proactive suggestions list."
         elif ch in (ord('x'), ord('X')) and suggestions:
             curr_sug = suggestions[selected_idx]
@@ -1325,6 +1322,7 @@ def prompt_suggestions_panel(stdscr):
             if prompt_confirm(stdscr, f"Dismiss suggestion #{selected_idx + 1}?"):
                 from jules_scraper import dismiss_suggestion
                 dismiss_suggestion(task_title)
+                dismissed_set = load_dismissed_suggestions()
                 status_msg = f"🗑️ Dismissed suggestion #{selected_idx + 1}"
             else:
                 status_msg = "Cancelled dismissal."
