@@ -1093,11 +1093,47 @@ def prompt_suggestions_panel(stdscr, preloaded_suggestions=None):
     suggestions = fetch_jules_suggestions(filter_dismissed=False)
     dismissed_set = load_dismissed_suggestions()
 
+    last_sort_time = time.time()
+    last_status_snapshot = dict(agy_task_status)
+
+    def sort_suggestions_by_priority(s_list):
+        def get_priority(sug):
+            t = sug.get("title", "").strip()
+            st = agy_task_status.get(t, "")
+            if "RUNNING" in st or "VERIFYING" in st:
+                return 0
+            elif "COMPLETED" in st or "VERIFIED" in st or "DONE" in st or t in dismissed_set:
+                return 1
+            elif "QUEUED" in st:
+                return 2
+            elif "ERROR" in st or "FAILED" in st:
+                return 3
+            else:
+                return 4
+        return sorted(s_list, key=get_priority)
+
+    suggestions = sort_suggestions_by_priority(suggestions)
+
     while True:
         height, width = stdscr.getmaxyx()
         stdscr.erase()
         spin_idx = (spin_idx + 1) % len(spinner_frames)
         spin_char = spinner_frames[spin_idx]
+
+        # Check for status changes and apply sorting after a 2-second hysteresis delay
+        now_t = time.time()
+        if agy_task_status != last_status_snapshot:
+            last_status_snapshot = dict(agy_task_status)
+            last_sort_time = now_t
+        elif now_t - last_sort_time >= 2.0:
+            current_selected_title = suggestions[selected_idx].get("title") if suggestions and selected_idx < len(suggestions) else None
+            suggestions = sort_suggestions_by_priority(suggestions)
+            if current_selected_title:
+                for idx_s, sg in enumerate(suggestions):
+                    if sg.get("title") == current_selected_title:
+                        selected_idx = idx_s
+                        break
+            last_sort_time = now_t + 999999.0  # Prevent constant re-sorting until next status mutation
 
         header = " 💡 JUL̇ES PROACTIVE TASK SUGGESTIONS "
         stdscr.attron(curses.color_pair(5) | curses.A_BOLD)
@@ -1224,17 +1260,18 @@ def prompt_suggestions_panel(stdscr, preloaded_suggestions=None):
                         if 0 <= curr_y < height - 2:
                             prefix_space = "       " if s_idx == 0 else "         "
                             full_s_line = f"{prefix_space}{s_line}"[:width-4]
-                            stdscr.attron(curses.color_pair(3 if "ERROR" in status_info or "FAILED" in status_info else (2 if "DONE" in status_info or "COMPLETED" in status_info else 1)))
+                            st_color = curses.color_pair(3 if "ERROR" in status_info or "FAILED" in status_info else (7 if "DONE" in status_info or "COMPLETED" in status_info else 1))
+                            stdscr.attron(st_color)
                             stdscr.addstr(curr_y, 1, full_s_line)
-                            stdscr.attroff(curses.color_pair(3 if "ERROR" in status_info or "FAILED" in status_info else (2 if "DONE" in status_info or "COMPLETED" in status_info else 1)))
+                            stdscr.attroff(st_color)
                             curr_y += 1
                         else:
                             curr_y += 1
                 elif title.strip() in dismissed_set and 0 <= curr_y < height - 2:
                     status_line = "       ⚡ AGY Task Status: [COMPLETED ✅]"[:width-4]
-                    stdscr.attron(curses.color_pair(2))
+                    stdscr.attron(curses.color_pair(7))
                     stdscr.addstr(curr_y, 1, status_line)
-                    stdscr.attroff(curses.color_pair(2))
+                    stdscr.attroff(curses.color_pair(7))
                     curr_y += 1
 
                 end_y = curr_y - 1
