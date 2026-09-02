@@ -12,6 +12,7 @@ import json
 import time
 import subprocess
 import threading
+import textwrap
 from jules_manager import list_sessions, get_session_activities, send_message, archive_session, _make_request
 
 CONFIG_FILE = os.path.expanduser("~/.config/jules/config.json")
@@ -880,7 +881,6 @@ def prompt_suggestions_panel(stdscr):
 
                 curr_y += 1
                 if details:
-                    import textwrap
                     wrapped_details = textwrap.wrap(f"↳ {details}", max(20, width - 8)) or [f"↳ {details}"]
                     for d_idx, d_line in enumerate(wrapped_details):
                         if 0 <= curr_y < height - 2:
@@ -905,7 +905,6 @@ def prompt_suggestions_panel(stdscr):
                     else:
                         status_info = raw_info
 
-                    import textwrap
                     wrapped_status = textwrap.wrap(f"⚡ AGY Task Status: [{status_info}]", max(20, width - 8)) or [f"⚡ AGY Task Status: [{status_info}]"]
                     for s_idx, s_line in enumerate(wrapped_status):
                         if 0 <= curr_y < height - 2:
