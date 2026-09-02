@@ -1123,20 +1123,13 @@ def prompt_suggestions_panel(stdscr, preloaded_suggestions=None):
         spin_idx = (spin_idx + 1) % len(spinner_frames)
         spin_char = spinner_frames[spin_idx]
 
-        # Check for status changes and apply sorting after a 2-second hysteresis delay
-        now_t = time.time()
-        if agy_task_status != last_status_snapshot:
-            last_status_snapshot = dict(agy_task_status)
-            last_sort_time = now_t
-        elif now_t - last_sort_time >= 2.0:
-            current_selected_title = suggestions[selected_idx].get("title") if suggestions and selected_idx < len(suggestions) else None
-            suggestions = sort_suggestions_by_priority(suggestions)
-            if current_selected_title:
-                for idx_s, sg in enumerate(suggestions):
-                    if sg.get("title") == current_selected_title:
-                        selected_idx = idx_s
-                        break
-            last_sort_time = now_t + 999999.0  # Prevent constant re-sorting until next status mutation
+        current_selected_title = suggestions[selected_idx].get("title") if suggestions and selected_idx < len(suggestions) else None
+        suggestions = sort_suggestions_by_priority(suggestions)
+        if current_selected_title:
+            for idx_s, sg in enumerate(suggestions):
+                if sg.get("title") == current_selected_title:
+                    selected_idx = idx_s
+                    break
 
         # Calculate active (uncompleted) suggestion count
         active_count = len([
