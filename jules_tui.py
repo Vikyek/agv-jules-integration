@@ -1008,7 +1008,7 @@ def prompt_suggestions_panel(stdscr):
                 safe_title = task_title.replace("'", "").replace('"', "")
                 safe_details = task_details.replace("'", "").replace('"', "")
                 prompt_prefix = f"/{agy_mode} " if agy_mode == "plan" else ""
-                prompt_str = f"{prompt_prefix}{safe_title}: {safe_details} in {repo_name}"
+                prompt_str = f"{prompt_prefix}{safe_title}: {safe_details}"
                 flags = f"--mode {agy_mode}"
                 if skip_perms:
                     flags += " --dangerously-skip-permissions"
@@ -1018,14 +1018,20 @@ def prompt_suggestions_panel(stdscr):
                     try:
                         import shlex
                         cmd_args = ["/usr/sbin/agy"] + shlex.split(flg) + ["-p", prompt]
-                        res = subprocess.run(cmd_args, capture_output=True, text=True)
+                        clean_repo = r_name.split("/")[-1] if "/" in r_name else r_name
+                        target_cwd = os.path.expanduser(f"~/Projects/{clean_repo}")
+                        if not os.path.exists(target_cwd):
+                            target_cwd = os.path.expanduser("~/Projects/paru-wrapper")
+
+                        res = subprocess.run(cmd_args, cwd=target_cwd, capture_output=True, text=True)
                         if res.returncode == 0:
                             from jules_scraper import dismiss_suggestion
                             dismiss_suggestion(title)
                             agy_task_status[title] = "COMPLETED ✅"
                             log_action_event(title, r_name, "main", "AGY_SUGGESTION_RUN")
                         else:
-                            agy_task_status[title] = f"FAILED ✖ (code {res.returncode})"
+                            err_reason = res.stderr.strip() or res.stdout.strip()[-60:] or f"code {res.returncode}"
+                            agy_task_status[title] = f"FAILED ✖ ({err_reason})"
                     except Exception as e:
                         agy_task_status[title] = f"ERROR 🚨 ({e})"
 
@@ -1034,47 +1040,58 @@ def prompt_suggestions_panel(stdscr):
             status_msg = f"🚀 Started non-blocking AGY ({agy_mode}) for {len(valid_sugs)} selected suggestion(s)!"
             selected_set.clear()
         elif ch in (ord('c'), ord('C')) and suggestions:
-            curr_sug = suggestions[selected_idx]
-            task_title = curr_sug.get("title", "")
-            task_details = curr_sug.get("details", "")
-            repo_name = curr_sug.get("repo", "Vikyek/paru-wrapper")
-            
             from jules_scraper import load_dismissed_suggestions
             dismissed_set = load_dismissed_suggestions()
-            if task_title.strip() in dismissed_set or agy_task_status.get(task_title) in ("COMPLETED ✅", "VERIFIED DONE ✅"):
-                status_msg = f"⚠️ Suggestion #{selected_idx + 1} is already completed!"
-                continue
-            if agy_task_status.get(task_title) in ("RUNNING", "VERIFYING"):
-                status_msg = f"⚠️ Suggestion #{selected_idx + 1} is already verifying!"
+
+            target_indices = list(selected_set) if selected_set else [selected_idx]
+            target_sugs = [suggestions[i] for i in target_indices if i < len(suggestions)]
+            valid_sugs = [
+                s for s in target_sugs
+                if s.get("title", "").strip() not in dismissed_set
+                and agy_task_status.get(s.get("title", "")) not in ("COMPLETED ✅", "VERIFIED DONE ✅", "RUNNING", "VERIFYING")
+            ]
+
+            if not valid_sugs:
+                status_msg = "⚠️ Selected suggestion(s) are already completed or running!"
                 continue
 
             cfg = load_config()
             skip_perms = cfg.get("agy_skip_permissions", True)
-            
-            safe_title = task_title.replace("'", "").replace('"', "")
-            safe_details = task_details.replace("'", "").replace('"', "")
-            check_prompt = f"Check if suggestion is completed in {repo_name}: {safe_title} - {safe_details}. If fixed output SUCCESS else INCOMPLETE."
-            flags = "--mode accept-edits"
-            if skip_perms:
-                flags += " --dangerously-skip-permissions"
 
-            def check_agy_task(title, prompt, flg, r_name):
-                agy_task_status[title] = "VERIFYING"
-                try:
-                    import shlex
-                    cmd_args = ["/usr/sbin/agy"] + shlex.split(flg) + ["-p", prompt]
-                    res = subprocess.run(cmd_args, capture_output=True, text=True)
-                    if "SUCCESS" in res.stdout.upper():
-                        from jules_scraper import dismiss_suggestion
-                        dismiss_suggestion(title)
-                        agy_task_status[title] = "VERIFIED DONE ✅"
-                        log_action_event(title, r_name, "main", "AGY_VERIFICATION_CHECK")
-                    else:
-                        agy_task_status[title] = "INCOMPLETE ℹ️"
-                except Exception as e:
-                    agy_task_status[title] = f"ERROR 🚨 ({e})"
+            for sug in valid_sugs:
+                task_title = sug.get("title", "")
+                task_details = sug.get("details", "")
+                repo_name = sug.get("repo", "Vikyek/paru-wrapper")
 
-            threading.Thread(target=check_agy_task, args=(task_title, check_prompt, flags, repo_name), daemon=True).start()
+                safe_title = task_title.replace("'", "").replace('"', "")
+                safe_details = task_details.replace("'", "").replace('"', "")
+                check_prompt = f"Check if suggestion is completed in {repo_name}: {safe_title} - {safe_details}. If fixed output SUCCESS else INCOMPLETE."
+                flags = "--mode accept-edits"
+                if skip_perms:
+                    flags += " --dangerously-skip-permissions"
+
+                def check_agy_task(title, prompt, flg, r_name):
+                    agy_task_status[title] = "VERIFYING"
+                    try:
+                        import shlex
+                        cmd_args = ["/usr/sbin/agy"] + shlex.split(flg) + ["-p", prompt]
+                        clean_repo = r_name.split("/")[-1] if "/" in r_name else r_name
+                        target_cwd = os.path.expanduser(f"~/Projects/{clean_repo}")
+                        if not os.path.exists(target_cwd):
+                            target_cwd = os.path.expanduser("~/Projects/paru-wrapper")
+
+                        res = subprocess.run(cmd_args, cwd=target_cwd, capture_output=True, text=True)
+                        if "SUCCESS" in res.stdout.upper():
+                            from jules_scraper import dismiss_suggestion
+                            dismiss_suggestion(title)
+                            agy_task_status[title] = "VERIFIED DONE ✅"
+                            log_action_event(title, r_name, "main", "AGY_VERIFICATION_CHECK")
+                        else:
+                            agy_task_status[title] = "INCOMPLETE ℹ️"
+                    except Exception as e:
+                        agy_task_status[title] = f"ERROR 🚨 ({e})"
+
+                threading.Thread(target=check_agy_task, args=(task_title, check_prompt, flags, repo_name), daemon=True).start()
             status_msg = f"🔍 Started non-blocking AGY verification check for suggestion #{selected_idx + 1}"
         elif ch in (ord('a'), ord('A')) and suggestions:
             cfg = load_config()
