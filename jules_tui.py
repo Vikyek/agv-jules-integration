@@ -792,7 +792,7 @@ def prompt_suggestions_panel(stdscr):
 
         suggestions = fetch_jules_suggestions()
 
-        footer_tips = "Keybindings: [g] start in AGY | [j] start in Jules | [x] dismiss suggestion | [ESC] return to active sessions"
+        footer_tips = "Keybindings: [g] start AGY | [c] check if done | [j] start Jules | [r] refresh | [x] dismiss | [ESC] return"
         stdscr.attron(curses.color_pair(1))
         stdscr.addstr(height - 1, 0, footer_tips.center(width)[:width-1])
         stdscr.attroff(curses.color_pair(1))
@@ -915,6 +915,32 @@ def prompt_suggestions_panel(stdscr):
                 status_msg = f"🚀 Launched non-interactive AGY ({agy_mode}) task for suggestion #{selected_idx + 1}"
             except Exception as e:
                 status_msg = f"Error launching AGY window: {e}"
+        elif ch in (ord('c'), ord('C')) and suggestions:
+            curr_sug = suggestions[selected_idx]
+            task_title = curr_sug.get("title", "")
+            task_details = curr_sug.get("details", "")
+            repo_name = curr_sug.get("repo", "Vikyek/paru-wrapper")
+            
+            cfg = load_config()
+            skip_perms = cfg.get("agy_skip_permissions", True)
+            
+            check_prompt = f"Check if the following suggestion is already completed or fixed in {repo_name}: '{task_title}: {task_details}'. If it is fixed or satisfied, output SUCCESS. Otherwise output INCOMPLETE."
+            flags = "--mode accept-edits"
+            if skip_perms:
+                flags += " --dangerously-skip-permissions"
+
+            escaped_title = task_title.replace("'", "'\\''")
+            cmd_script = f"/usr/sbin/agy {flags} -p '{check_prompt}' | grep -qi 'SUCCESS' && python3 -c 'from jules_scraper import dismiss_suggestion; dismiss_suggestion(\"{escaped_title}\")'"
+
+            try:
+                import subprocess
+                cmd = ["i3-msg", f"exec --no-startup-id /usr/sbin/kitty --title 'AGY Check - {task_title[:20]}' bash -c \"{cmd_script}\""]
+                subprocess.Popen(cmd)
+                status_msg = f"🔍 Launched AGY verification check for suggestion #{selected_idx + 1}"
+            except Exception as e:
+                status_msg = f"Error launching AGY check window: {e}"
+        elif ch in (ord('r'), ord('R')):
+            status_msg = "🔄 Refreshed proactive suggestions list."
         elif ch in (ord('x'), ord('X')) and suggestions:
             curr_sug = suggestions[selected_idx]
             task_title = curr_sug.get("title", "")
