@@ -86,6 +86,7 @@ def draw_menu(stdscr):
         curses.init_pair(3, curses.COLOR_RED, -1)              # Feedback / Warning (Red)
         curses.init_pair(4, curses.COLOR_RED, curses.COLOR_YELLOW) # Topbar: Yellow background with Red text
         curses.init_pair(5, curses.COLOR_BLACK, curses.COLOR_YELLOW) # Highlighted selection: Yellow background with Black text
+        curses.init_pair(6, curses.COLOR_BLACK, curses.COLOR_RED)    # Unresolvable / Critical Alert: Red background with Black text
     except Exception:
         try:
             curses.init_pair(1, curses.COLOR_YELLOW, curses.COLOR_BLACK)
@@ -93,6 +94,7 @@ def draw_menu(stdscr):
             curses.init_pair(3, curses.COLOR_RED, curses.COLOR_BLACK)
             curses.init_pair(4, curses.COLOR_RED, curses.COLOR_YELLOW)
             curses.init_pair(5, curses.COLOR_BLACK, curses.COLOR_YELLOW)
+            curses.init_pair(6, curses.COLOR_BLACK, curses.COLOR_RED)
         except Exception:
             pass
 
@@ -112,6 +114,10 @@ def draw_menu(stdscr):
     listen_frames = ["⣾", "⣽", "⣻", "⢿", "⡿", "⣟", "⣯", "⣷"]
     braille_swirl = ["⣾", "⣽", "⣻", "⢿", "⡿", "⣟", "⣯", "⣷"]
 
+    # Track manual service stop triggers
+    user_stopped_service = False
+    prev_svc_active = None
+
     view_archived = False
 
     while True:
@@ -127,26 +133,37 @@ def draw_menu(stdscr):
         auto_enabled = "enabled" in auto_check.stdout.strip()
         auto_str = "ENABLED" if auto_enabled else "DISABLED"
 
+        # Unexpected Service Stop Detection
+        unexpected_stop = (not svc_active) and (prev_svc_active is True) and (not user_stopped_service)
+        if unexpected_stop:
+            action_msg = "🚨 WARNING: Listener service stopped unexpectedly! Check logs or press [s] to restart."
+
+        if svc_active:
+            user_stopped_service = False
+        prev_svc_active = svc_active
+
         # Subtle clean Braille spinner animation for active service
         curr_frame_idx = int(time.time() * 6)
         braille_icon = braille_swirl[curr_frame_idx % len(braille_swirl)]
         listen_icon = listen_frames[curr_frame_idx % len(listen_frames)] if svc_active else "OFF"
 
-        # Header (Yellow background with Red text, Jules logo 󱚝)
+        # Header (Yellow background normally, Red background with Black text if unexpected stop or service stopped)
+        header_color = curses.color_pair(6) | curses.A_BOLD if (not svc_active and not user_stopped_service) else curses.color_pair(4) | curses.A_BOLD
         header_title = " 󱚝 JULES MANAGER " if width < 80 else " 󱚝 GOOGLE JULES API MANAGER & LISTENER TUI "
-        stdscr.attron(curses.color_pair(4) | curses.A_BOLD)
+        stdscr.attron(header_color)
         stdscr.addstr(0, 0, header_title.center(width)[:width])
-        stdscr.attroff(curses.color_pair(4) | curses.A_BOLD)
+        stdscr.attroff(header_color)
 
-        # Mode line (Centered)
+        # Mode line (Centered) - Service Disabled / Stopped shown in Red
         if width < 80:
             mode_str = f"Svc:[{svc_str} {listen_icon}] Auto:[{auto_str[:3]}]"
         else:
             mode_str = f"Mode: [{cfg.get('mode', 'continuous').upper()}] | Service: [{svc_str} {listen_icon}] | Autostart: [{auto_str}]"
             
-        stdscr.attron(curses.color_pair(1) | curses.A_BOLD)
+        mode_color = curses.color_pair(6) | curses.A_BOLD if not svc_active else curses.color_pair(1) | curses.A_BOLD
+        stdscr.attron(mode_color)
         stdscr.addstr(1, 0, mode_str.center(width)[:width])
-        stdscr.attroff(curses.color_pair(1) | curses.A_BOLD)
+        stdscr.attroff(mode_color)
 
         # Fetch and preload all sessions & activities into memory
         now = time.time()
@@ -207,8 +224,8 @@ def draw_menu(stdscr):
                 if "COMPLETED" in state or "SUCCEEDED" in state or "RESOLVED" in state or "ARCHIVED" in state:
                     color = curses.color_pair(2)
                     display_state = state
-                elif "FEEDBACK" in state or "INPUT" in state or "REVIEW" in state:
-                    color = curses.color_pair(3)
+                elif "FEEDBACK" in state or "INPUT" in state or "REVIEW" in state or "PAUSED" in state:
+                    color = curses.color_pair(6) | curses.A_BOLD  # Highlighted Red background with Black text
                     display_state = f"{state} ⚠️"
                 elif "IN_PROGRESS" in state or "RUNNING" in state:
                     color = curses.color_pair(1) | curses.A_BOLD
@@ -297,6 +314,8 @@ def draw_menu(stdscr):
         elif key in (ord('s'), ord('S')):
             action_name = "Stop background listener service?" if svc_active else "Start background listener service?"
             if prompt_confirm(stdscr, action_name):
+                if svc_active:
+                    user_stopped_service = True
                 action_msg = toggle_systemd_service()
                 last_fetch = 0
             else:
