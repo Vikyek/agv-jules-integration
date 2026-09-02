@@ -1,4 +1,4 @@
-# 🤖 jules-manager
+# 🤖 jules-vanager
 
 Standalone Google Jules API Manager, Listener Daemon, Interactive TUI, and Conky HUD Widget — with optional Antigravity (AGY) integration.
 

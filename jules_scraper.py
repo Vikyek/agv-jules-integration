@@ -143,7 +143,7 @@ def fetch_sourcery_pr_suggestions():
 
     # Fallback to local git repository commit history for code health refactor logs if API is rate limited or timed out
     if not suggestions:
-        for clean_repo in ["paru-wrapper", "jules-manager"]:
+        for clean_repo in ["paru-wrapper", "jules-vanager"]:
             repo_dir = os.path.expanduser(f"~/Projects/{clean_repo}")
             if os.path.exists(os.path.join(repo_dir, ".git")):
                 try:

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# install.sh — Setup script for jules-manager
+# install.sh — Setup script for jules-vanager
 # Symlinks executables, registers systemd user service, installs desktop shortcut, and links optional AGY plugin.
 #
 
