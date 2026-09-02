@@ -876,20 +876,23 @@ def agy_worker():
             agy_task_status[title] = "RUNNING"
             save_agy_task_statuses(agy_task_status)
             try:
+                from jules_manager import log_action
+                log_action(title, "AGY_TASK_STARTED", f"Launched background AGY worker for {title} in {r_name}", title=title, repo=r_name, branch="main", action_by="auto")
                 import shlex
                 cmd_args = ["/usr/sbin/agy"] + shlex.split(flg) + ["-p", prompt]
                 res = subprocess.run(cmd_args, cwd=target_cwd, capture_output=True, text=True)
                 if res.returncode == 0:
                     from jules_scraper import dismiss_suggestion
-                    from jules_manager import log_action
                     dismiss_suggestion(title)
                     agy_task_status[title] = "COMPLETED ✅"
-                    log_action(title, "AGY_SUGGESTION_RUN", f"Executed suggestion task in {r_name}", title=title, repo=r_name, branch="main", action_by="auto")
+                    log_action(title, "AGY_SUGGESTION_RUN", f"Executed suggestion task successfully: {res.stdout[:150]}", title=title, repo=r_name, branch="main", action_by="auto")
                 else:
                     err_reason = res.stderr.strip() or res.stdout.strip()[-60:] or f"code {res.returncode}"
                     agy_task_status[title] = f"FAILED ✖ ({err_reason})"
+                    log_action(title, "AGY_TASK_FAILED", f"AGY worker failed: {err_reason}", title=title, repo=r_name, branch="main", action_by="auto")
             except Exception as e:
                 agy_task_status[title] = f"ERROR 🚨 ({e})"
+                log_action(title, "AGY_TASK_ERROR", f"AGY worker exception: {e}", title=title, repo=r_name, branch="main", action_by="auto")
             save_agy_task_statuses(agy_task_status)
 
         task_queue.task_done()
