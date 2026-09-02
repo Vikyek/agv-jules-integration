@@ -858,32 +858,6 @@ def agy_worker():
 for _ in range(MAX_CONCURRENT_AGY):
     threading.Thread(target=agy_worker, daemon=True).start()
 
-def prompt_suggestions_panel(stdscr):
-    """
-    Displays a dedicated full-screen Jules Suggestions panel displaying all scraped class="suggestion-info" elements.
-    Gives options to launch task in AGY (/plan) with context payload or spawn in Jules API.
-    """
-    from jules_scraper import fetch_jules_suggestions
-    stdscr.timeout(-1)
-    selected_idx = 0
-    selected_set = set()
-    status_msg = ""
-    spinner_frames = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
-    spin_idx = 0
-
-    while True:
-        height, width = stdscr.getmaxyx()
-        stdscr.erase()
-        spin_idx = (spin_idx + 1) % len(spinner_frames)
-        spin_char = spinner_frames[spin_idx]
-
-        header = " 💡 JUL̇ES PROACTIVE TASK SUGGESTIONS "
-        stdscr.attron(curses.color_pair(5) | curses.A_BOLD)
-        stdscr.addstr(0, 0, header[:width].center(width))
-        stdscr.attroff(curses.color_pair(5) | curses.A_BOLD)
-
-        # Do not filter out dismissed suggestions so completed items stay visible until explicit refresh [r]
-        suggestions = fetch_jules_suggestions(filter_dismissed=False)
 def copy_to_clipboard(text):
     """Helper to copy text to system clipboard via xclip, xsel, or wl-copy."""
     try:
@@ -1013,6 +987,33 @@ def prompt_suggestion_details_panel(stdscr, sug, agy_status=""):
                 status_msg = "📋 Copied error message / status to clipboard!"
             else:
                 status_msg = "⚠️ Clipboard tool (xclip/xsel/wl-copy) failed."
+
+def prompt_suggestions_panel(stdscr):
+    """
+    Displays a dedicated full-screen Jules Suggestions panel displaying all scraped class="suggestion-info" elements.
+    Gives options to launch task in AGY (/plan) with context payload or spawn in Jules API.
+    """
+    from jules_scraper import fetch_jules_suggestions
+    stdscr.timeout(-1)
+    selected_idx = 0
+    selected_set = set()
+    status_msg = ""
+    spinner_frames = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
+    spin_idx = 0
+
+    while True:
+        height, width = stdscr.getmaxyx()
+        stdscr.erase()
+        spin_idx = (spin_idx + 1) % len(spinner_frames)
+        spin_char = spinner_frames[spin_idx]
+
+        header = " 💡 JUL̇ES PROACTIVE TASK SUGGESTIONS "
+        stdscr.attron(curses.color_pair(5) | curses.A_BOLD)
+        stdscr.addstr(0, 0, header[:width].center(width))
+        stdscr.attroff(curses.color_pair(5) | curses.A_BOLD)
+
+        # Do not filter out dismissed suggestions so completed items stay visible until explicit refresh [r]
+        suggestions = fetch_jules_suggestions(filter_dismissed=False)
 
         # Multi-line footer keybindings bar wrapping calculation (using non-breaking spaces \u00A0 between keybind badge and label)
         long_sug_tips = f"Keybindings: [a] select all | [space] toggle | [i] inspect details | [g] start AGY ({len(selected_set)}) | [c] check | [j] Jules | [h] history | [v] archived | [r] refresh | [x] dismiss | [ESC] return"
