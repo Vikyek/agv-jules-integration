@@ -54,16 +54,79 @@ def dismiss_suggestion(title):
     with open(DISMISSED_FILE, "w") as f:
         json.dump(list(dismissed), f, indent=2)
 
+def fetch_sourcery_pr_suggestions():
+    """
+    Fetches code review suggestions and refactoring recommendations left by Sourcery-AI on GitHub Pull Requests.
+    """
+    import subprocess
+    suggestions = []
+    repos = ["Vikyek/paru-wrapper", "Vikyek/agv-jules-integration"]
+    seen_titles = set()
+
+    for repo in repos:
+        try:
+            res = subprocess.run(
+                ["gh", "pr", "list", "--state", "all", "--json", "number,title,comments,reviews", "-R", repo],
+                capture_output=True, text=True
+            )
+            if res.returncode == 0:
+                prs = json.loads(res.stdout)
+                for pr in prs:
+                    pr_num = pr.get("number")
+                    pr_title = pr.get("title", "")
+                    
+                    # Inspect inline/PR review comments
+                    for comment in pr.get("comments", []):
+                        author = comment.get("author", {}).get("login", "")
+                        body = comment.get("body", "")
+                        if "sourcery" in author.lower() or "sourcery" in body.lower():
+                            # Extract actionable comment lines
+                            lines = [l.strip() for l in body.splitlines() if l.strip() and not l.strip().startswith("<") and not l.strip().startswith("-")]
+                            clean_body = " ".join(lines[:3]) if lines else body[:180]
+                            stitle = f"Sourcery PR #{pr_num}: {clean_body[:60]}"
+                            if stitle not in seen_titles:
+                                seen_titles.add(stitle)
+                                suggestions.append({
+                                    "title": stitle,
+                                    "details": f"Sourcery PR #{pr_num} recommendation ({repo}): {clean_body[:200]}",
+                                    "repo": repo,
+                                    "source": "sourcery_pr_comment"
+                                })
+
+                    for review in pr.get("reviews", []):
+                        author = review.get("author", {}).get("login", "")
+                        body = review.get("body", "")
+                        if ("sourcery" in author.lower() or "sourcery" in body.lower()) and body.strip():
+                            lines = [l.strip() for l in body.splitlines() if l.strip() and not l.strip().startswith("<") and not l.strip().startswith("-")]
+                            clean_body = " ".join(lines[:3]) if lines else body[:180]
+                            stitle = f"Sourcery Review PR #{pr_num}: {clean_body[:60]}"
+                            if stitle not in seen_titles:
+                                seen_titles.add(stitle)
+                                suggestions.append({
+                                    "title": stitle,
+                                    "details": f"Sourcery PR #{pr_num} review recommendation ({repo}): {clean_body[:200]}",
+                                    "repo": repo,
+                                    "source": "sourcery_pr_review"
+                                })
+        except Exception:
+            pass
+
+    return suggestions
+
 def fetch_jules_suggestions(raw_html_snippet=None, filter_dismissed=True):
     """
-    Scrapes or fetches all Jules suggestions (including class="suggestion-info" and class="suggestion-title" elements)
-    from https://jules.google.com/session or stored HTML snippets/configurations.
+    Scrapes or fetches all Jules & Sourcery suggestions
+    from https://jules.google.com/session, GitHub PR comments, or stored configurations.
     Filters out dismissed suggestions if filter_dismissed is True.
     Returns list of suggestion dictionaries.
     """
     import re
     dismissed_titles = load_dismissed_suggestions() if filter_dismissed else set()
     suggestions = []
+
+    # Fetch live Sourcery PR suggestions first
+    sourcery_sugs = fetch_sourcery_pr_suggestions()
+    suggestions.extend(sourcery_sugs)
     
     html_content = raw_html_snippet
     if not html_content:
