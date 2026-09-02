@@ -325,6 +325,8 @@ def draw_menu(stdscr):
 
     selected_idx = 0
     sessions_cache = []
+    archived_sessions_cache = []
+    suggestions_cache = []
     details_cache = {}
     last_fetch = 0
     action_msg = ""
@@ -335,16 +337,17 @@ def draw_menu(stdscr):
     fetch_lock = threading.Lock()
     is_fetching = False
 
-    def bg_fetch():
-        nonlocal is_fetching, sessions_cache, details_cache, last_fetch
+    def bg_fetch(force=False):
+        nonlocal is_fetching, sessions_cache, archived_sessions_cache, suggestions_cache, details_cache, last_fetch
         with fetch_lock:
             if is_fetching:
                 return
             is_fetching = True
 
         def run_work():
-            nonlocal is_fetching, sessions_cache, details_cache, last_fetch
+            nonlocal is_fetching, sessions_cache, archived_sessions_cache, suggestions_cache, details_cache, last_fetch
             try:
+                # 1. Preload Active Sessions
                 res = list_sessions(include_archived=False)
                 raw_sessions = res.get("sessions", []) if isinstance(res, dict) else []
                 new_sessions = [s for s in raw_sessions if s.get("state") not in ("ARCHIVED", "CLOSED")]
@@ -367,8 +370,20 @@ def draw_menu(stdscr):
                             "activities": get_session_activities(sid)
                         }
 
+                # 2. Preload Archived Sessions Collection
+                arch_res = list_sessions(include_archived=True)
+                raw_arch = arch_res.get("sessions", []) if isinstance(arch_res, dict) else []
+                new_archived = [s for s in raw_arch if s.get("archived") or s.get("state") in ("ARCHIVED", "COMPLETED", "SUCCEEDED", "RESOLVED", "MERGED", "CLOSED")]
+                new_archived.sort(key=lambda x: x.get("updateTime") or x.get("createTime") or "")
+
+                # 3. Preload Proactive Suggestions List
+                from jules_scraper import fetch_jules_suggestions
+                new_sugs = fetch_jules_suggestions(filter_dismissed=False)
+
                 with fetch_lock:
                     sessions_cache = new_sessions
+                    archived_sessions_cache = new_archived
+                    suggestions_cache = new_sugs
                     details_cache = new_details
                     last_fetch = time.time()
             except Exception:
@@ -677,13 +692,10 @@ def draw_menu(stdscr):
             action_msg = f"🌐 Opened Jules web page: {url}"
         elif key in (ord('h'), ord('H')):
             action_msg = prompt_action_history_panel(stdscr)
-            last_fetch = 0
         elif key in (ord('g'), ord('G')):
-            action_msg = prompt_suggestions_panel(stdscr)
-            last_fetch = 0
+            action_msg = prompt_suggestions_panel(stdscr, preloaded_suggestions=suggestions_cache)
         elif key in (ord('v'), ord('V')):
-            action_msg = prompt_archived_panel(stdscr)
-            last_fetch = 0
+            action_msg = prompt_archived_panel(stdscr, preloaded_archived=archived_sessions_cache)
         elif key in (ord('u'), ord('U')) and sessions_cache:
             curr_s = sessions_cache[selected_idx]
             sid = curr_s.get("id") or curr_s.get("name", "").split("/")[-1]
@@ -988,7 +1000,7 @@ def prompt_suggestion_details_panel(stdscr, sug, agy_status=""):
             else:
                 status_msg = "⚠️ Clipboard tool (xclip/xsel/wl-copy) failed."
 
-def prompt_suggestions_panel(stdscr):
+def prompt_suggestions_panel(stdscr, preloaded_suggestions=None):
     """
     Displays a dedicated full-screen Jules Suggestions panel displaying all scraped class="suggestion-info" elements.
     Gives options to launch task in AGY (/plan) with context payload or spawn in Jules API.
@@ -1001,8 +1013,8 @@ def prompt_suggestions_panel(stdscr):
     spinner_frames = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
     spin_idx = 0
 
-    # Cache suggestions & dismissed set initially so keypress/render loops run at 60+ FPS instantly
-    suggestions = fetch_jules_suggestions(filter_dismissed=False)
+    # Use preloaded suggestions if available, otherwise fetch
+    suggestions = preloaded_suggestions if preloaded_suggestions is not None else fetch_jules_suggestions(filter_dismissed=False)
     dismissed_set = load_dismissed_suggestions()
 
     while True:
@@ -1527,7 +1539,7 @@ def prompt_archived_suggestions_panel(stdscr):
                 except Exception as e:
                     status_msg = f"Error restoring: {e}"
 
-def prompt_archived_panel(stdscr):
+def prompt_archived_panel(stdscr, preloaded_archived=None):
     """Displays a dedicated full-screen Archived Sessions Collection panel (stored archived session objects with auto vs manual tags)."""
     stdscr.timeout(-1)
     selected_idx = 0
@@ -1547,21 +1559,16 @@ def prompt_archived_panel(stdscr):
     except Exception:
         pass
 
-    while True:
-        height, width = stdscr.getmaxyx()
-        stdscr.clear()
-
-        # Header
-        header = " 📦 ARCHIVED SESSIONS COLLECTION "
-        stdscr.attron(curses.color_pair(5) | curses.A_BOLD)
-        stdscr.addstr(0, 0, header[:width].center(width))
-        stdscr.attroff(curses.color_pair(5) | curses.A_BOLD)
-
-        # Fetch archived sessions
+    # Use preloaded archived sessions if provided, otherwise fetch ONCE
+    if preloaded_archived is not None:
+        archived_sessions = preloaded_archived
+    else:
         res = list_sessions(include_archived=True)
         raw_sessions = res.get("sessions", []) if isinstance(res, dict) else []
         archived_sessions = [s for s in raw_sessions if s.get("archived") or s.get("state") in ("ARCHIVED", "COMPLETED", "SUCCEEDED", "RESOLVED", "MERGED", "CLOSED")]
         archived_sessions.sort(key=lambda x: x.get("updateTime") or x.get("createTime") or "")
+
+    while True:
 
         footer_tips = "Keybindings: [u] unarchive | [Enter] inspect details | [ESC] return to active sessions"
         stdscr.attron(curses.color_pair(1))
