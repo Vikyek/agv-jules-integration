@@ -807,21 +807,39 @@ def prompt_suggestions_panel(stdscr):
         # Do not filter out dismissed suggestions so completed items stay visible until explicit refresh [r]
         suggestions = fetch_jules_suggestions(filter_dismissed=False)
 
-        long_sug_tips = "Keybindings: [g] start AGY | [a] start all | [c] check if done | [j] start Jules | [r] refresh | [x] dismiss | [ESC] return"
-        if len(long_sug_tips) <= width - 2:
-            footer_tips = long_sug_tips
+        # Multi-line footer keybindings bar wrapping calculation (using non-breaking spaces \u00A0 between keybind badge and label)
+        long_sug_tips = f"Keybindings: [g]\u00A0start\u00A0AGY | [a]\u00A0start\u00A0all | [c]\u00A0check\u00A0done | [j]\u00A0start\u00A0Jules | [r]\u00A0refresh | [x]\u00A0dismiss | [ESC]\u00A0return"
+        if len(long_sug_tips) <= width - 4:
+            raw_sug_tips = long_sug_tips
         else:
-            footer_tips = "[g] start AGY | [a] start all | [c] check if done | [j] start Jules | [r] refresh | [x] dismiss | [ESC] return"
-        stdscr.attron(curses.color_pair(1))
-        stdscr.addstr(height - 1, 0, footer_tips.center(width)[:width-1])
-        stdscr.attroff(curses.color_pair(1))
+            nokey_tips = f"[g]\u00A0start\u00A0AGY | [a]\u00A0start\u00A0all | [c]\u00A0check\u00A0done | [j]\u00A0start\u00A0Jules | [r]\u00A0refresh | [x]\u00A0dismiss | [ESC]\u00A0return"
+            if len(nokey_tips) <= width - 4:
+                raw_sug_tips = nokey_tips
+            else:
+                raw_sug_tips = f"[g]\u00A0agy | [a]\u00A0all | [c]\u00A0check | [j]\u00A0jules | [r]\u00A0refresh | [x]\u00A0dismiss | [ESC]\u00A0return"
+
+        raw_sug_lines = textwrap.wrap(raw_sug_tips, max(20, width - 4)) or [raw_sug_tips]
+        sug_footer_lines = [l.strip().lstrip("|").rstrip("|").strip() for l in raw_sug_lines]
+        sug_footer_height = len(sug_footer_lines)
+
+        for idx, f_line in enumerate(sug_footer_lines):
+            f_y = height - sug_footer_height + idx
+            if 0 <= f_y < height:
+                try:
+                    stdscr.attron(curses.color_pair(1))
+                    stdscr.addstr(f_y, 0, f_line.center(width)[:width-1])
+                    stdscr.attroff(curses.color_pair(1))
+                except Exception:
+                    pass
 
         if status_msg:
-            stdscr.attron(curses.color_pair(3) | curses.A_BOLD)
-            stdscr.addstr(height - 2, 2, status_msg[:width-4])
-            stdscr.attroff(curses.color_pair(3) | curses.A_BOLD)
+            msg_y = height - 1 - sug_footer_height
+            if 0 <= msg_y < height:
+                stdscr.attron(curses.color_pair(3) | curses.A_BOLD)
+                stdscr.addstr(msg_y, 2, status_msg[:width-4])
+                stdscr.attroff(curses.color_pair(3) | curses.A_BOLD)
 
-        available_height = height - 4 - (1 if status_msg else 0)
+        available_height = height - 3 - sug_footer_height - (1 if status_msg else 0)
         curr_y = 2
 
         sug_row_map = {}
@@ -901,7 +919,7 @@ def prompt_suggestions_panel(stdscr):
                 _, mx, my, _, bstate = curses.getmouse()
                 if not (bstate & (curses.BUTTON1_CLICKED | curses.BUTTON1_RELEASED)):
                     continue
-                if my == height - 1:
+                if my >= height - sug_footer_height:
                     stdscr.timeout(1000)
                     return "Returned to active sessions."
                 else:
