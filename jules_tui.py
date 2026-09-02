@@ -1226,6 +1226,8 @@ def prompt_suggestions_panel(stdscr, preloaded_suggestions=None):
                 cursor_mark = ">" if i == selected_idx else " "
                 line1 = f"{cursor_mark} {chk} [#{i+1}] [{repo}] {title}"[:width-2]
 
+                is_completed_or_verified = agy_task_status.get(title) in ("COMPLETED ✅", "VERIFIED DONE ✅") or title.strip() in dismissed_set
+
                 if 0 <= curr_y < height - 2:
                     if i == selected_idx:
                         stdscr.attron(curses.color_pair(5) | curses.A_BOLD)
@@ -1235,15 +1237,18 @@ def prompt_suggestions_panel(stdscr, preloaded_suggestions=None):
                         stdscr.attron(curses.color_pair(7) | curses.A_BOLD)
                         stdscr.addstr(curr_y, 1, line1)
                         stdscr.attroff(curses.color_pair(7) | curses.A_BOLD)
+                    elif is_completed_or_verified:
+                        stdscr.attron(curses.color_pair(7))
+                        stdscr.addstr(curr_y, 1, line1)
+                        stdscr.attroff(curses.color_pair(7))
                     else:
                         stdscr.attron(curses.color_pair(1))
                         stdscr.addstr(curr_y, 1, line1)
                         stdscr.attroff(curses.color_pair(1))
 
                 curr_y += 1
-                is_completed_or_verified = agy_task_status.get(title) in ("COMPLETED ✅", "VERIFIED DONE ✅")
-                # Collapse (hide) details description under completed tasks unless selected
-                if details and (not is_completed_or_verified or i == selected_idx):
+                # Collapse (hide) red description details for completed/verified tasks completely (just title line)
+                if details and not is_completed_or_verified:
                     wrapped_details = textwrap.wrap(f"↳ {details}", max(20, width - 8)) or [f"↳ {details}"]
                     for d_idx, d_line in enumerate(wrapped_details):
                         if 0 <= curr_y < height - 2:
