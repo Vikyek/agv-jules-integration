@@ -1089,8 +1089,8 @@ def prompt_suggestions_panel(stdscr, preloaded_suggestions=None):
     spinner_frames = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
     spin_idx = 0
 
-    # Use preloaded suggestions if available, otherwise fetch with filter_dismissed=True
-    suggestions = preloaded_suggestions if preloaded_suggestions is not None else fetch_jules_suggestions(filter_dismissed=True)
+    # Perform automatic refresh on panel open to scan new suggestions without clearing completed task statuses
+    suggestions = fetch_jules_suggestions(filter_dismissed=False)
     dismissed_set = load_dismissed_suggestions()
 
     while True:

@@ -37,6 +37,7 @@ def get_headers():
     return headers
 
 DISMISSED_FILE = os.path.expanduser("~/.config/jules/dismissed_suggestions.json")
+SCANNED_SUGGESTIONS_FILE = os.path.expanduser("~/.config/jules/scanned_suggestions.json")
 
 def load_dismissed_suggestions():
     if os.path.exists(DISMISSED_FILE):
@@ -53,6 +54,31 @@ def dismiss_suggestion(title):
     os.makedirs(os.path.dirname(DISMISSED_FILE), exist_ok=True)
     with open(DISMISSED_FILE, "w") as f:
         json.dump(list(dismissed), f, indent=2)
+
+def load_persistent_suggestions():
+    """Loads all previously scanned and stored suggestion objects from disk."""
+    if os.path.exists(SCANNED_SUGGESTIONS_FILE):
+        try:
+            with open(SCANNED_SUGGESTIONS_FILE, "r") as f:
+                return json.load(f)
+        except Exception:
+            pass
+    return []
+
+def save_persistent_suggestions(new_suggestions):
+    """Merges and saves newly discovered suggestion objects to disk."""
+    existing = load_persistent_suggestions()
+    existing_map = {s.get("title", "").strip(): s for s in existing if isinstance(s, dict) and s.get("title")}
+    for s in new_suggestions:
+        t = s.get("title", "").strip()
+        if t and t not in existing_map:
+            existing_map[t] = s
+    try:
+        os.makedirs(os.path.dirname(SCANNED_SUGGESTIONS_FILE), exist_ok=True)
+        with open(SCANNED_SUGGESTIONS_FILE, "w") as f:
+            json.dump(list(existing_map.values()), f, indent=2)
+    except Exception:
+        pass
 
 def fetch_sourcery_pr_suggestions():
     """
@@ -251,7 +277,15 @@ def fetch_jules_suggestions(raw_html_snippet=None, filter_dismissed=True):
             }
         ]
 
-    return [s for s in suggestions if s.get("title", "").strip() not in dismissed_titles]
+    # Save newly scraped suggestions to disk
+    save_persistent_suggestions(suggestions)
+
+    # Load all stored historical suggestions from disk to ensure persistence across reruns
+    all_stored = load_persistent_suggestions()
+    combined_map = {s.get("title", "").strip(): s for s in (all_stored + suggestions) if isinstance(s, dict) and s.get("title")}
+    final_suggestions = list(combined_map.values())
+
+    return [s for s in final_suggestions if s.get("title", "").strip() not in dismissed_titles]
 
 def fetch_repo_dashboard(owner, repo):
     """
