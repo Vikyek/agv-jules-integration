@@ -830,14 +830,14 @@ def prompt_suggestions_panel(stdscr):
             task_details = curr_sug.get("details", "")
             repo_name = curr_sug.get("repo", "Vikyek/paru-wrapper")
             
-            # Print AGY /plan CLI launch payload
-            agy_cmd = f"agy /plan \"{task_title}: {task_details} in {repo_name}\""
+            prompt_str = f"/plan {task_title}: {task_details} in {repo_name}"
+            # Spawn interactive terminal window running AGY with the /plan prompt
             try:
                 import subprocess
-                subprocess.run(["xclip", "-selection", "clipboard"], input=agy_cmd.encode("utf-8"), capture_output=True)
-            except Exception:
-                pass
-            status_msg = f"📋 AGY /plan command copied to clipboard: {agy_cmd[:50]}..."
+                subprocess.Popen(["i3-msg", "exec", "--no-startup-id", f"/usr/sbin/kitty --title 'AGY - {task_title[:30]}' -e /usr/sbin/agy '{prompt_str}'"])
+                status_msg = f"🚀 Launched interactive AGY /plan window for suggestion #{selected_idx + 1}"
+            except Exception as e:
+                status_msg = f"Error launching AGY window: {e}"
         elif ch in (ord('j'), ord('J')) and suggestions:
             curr_sug = suggestions[selected_idx]
             task_title = curr_sug.get("title", "")
