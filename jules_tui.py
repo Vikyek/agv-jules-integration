@@ -29,6 +29,44 @@ def save_config(cfg):
     with open(CONFIG_FILE, "w") as f:
         json.dump(cfg, f, indent=2)
 
+def check_session_stuck_or_plan_loop(session_id, preloaded_activities=None):
+    """
+    Inspects session activity stream to detect if worker is stuck or trapped in a plan/patch loop
+    (e.g., multiple planGenerated, repeated failing patches, or un-stuck request needed).
+    Returns (is_stuck, reason_msg).
+    """
+    if not session_id:
+        return False, ""
+    try:
+        if preloaded_activities and isinstance(preloaded_activities, dict):
+            activities_list = preloaded_activities.get("activities", [])
+        else:
+            res = get_session_activities(session_id)
+            activities_list = res.get("activities", []) if isinstance(res, dict) else []
+
+        plan_count = 0
+        patch_fail_count = 0
+        duplicate_patch_signatures = set()
+
+        for act in activities_list:
+            if "planGenerated" in act:
+                plan_count += 1
+            if "artifacts" in act:
+                for art in act.get("artifacts", []):
+                    patch_str = str(art.get("changeSet", {}).get("gitPatch", {}).get("unidiffPatch", ""))
+                    if patch_str:
+                        if patch_str in duplicate_patch_signatures:
+                            patch_fail_count += 1
+                        duplicate_patch_signatures.add(patch_str)
+
+        if plan_count >= 2:
+            return True, f"PLAN_LOOP 🔄 ({plan_count} plans)"
+        if patch_fail_count >= 2:
+            return True, "STUCK_PATCH_LOOP ⚠️"
+    except Exception:
+        pass
+    return False, ""
+
 def check_session_pr_status(session):
     """
     Checks PR details for a session, returning status flags:
@@ -336,11 +374,11 @@ def draw_menu(stdscr):
                         }
             last_fetch = now
 
-        # Multi-line footer keybindings bar wrapping calculation
+        # Multi-line footer keybindings bar wrapping calculation (using non-breaking spaces \\u00A0 between keybind badge and label)
         if width < 80:
-            raw_tips = f"[s] {'stop' if svc_active else 'start'} | [b] auto | [p] open PR | [w] web | [h] history | [v] archived | [q] quit"
+            raw_tips = f"[s]\u00A0{'stop' if svc_active else 'start'} | [u]\u00A0unstuck | [b]\u00A0auto | [p]\u00A0open\u00A0PR | [w]\u00A0web | [h]\u00A0history | [v]\u00A0archived | [q]\u00A0quit"
         else:
-            raw_tips = f"Keybindings: [s] {'stop' if svc_active else 'start'} service | [b] autostart | [p] open PR | [w] open Jules web | [h] history log | [v] archived collection | [q] quit"
+            raw_tips = f"Keybindings: [s]\u00A0{'stop' if svc_active else 'start'}\u00A0service | [u]\u00A0unstuck\u00A0session | [b]\u00A0autostart | [p]\u00A0open\u00A0PR | [w]\u00A0open\u00A0Jules\u00A0web | [h]\u00A0history\u00A0log | [v]\u00A0archived\u00A0collection | [q]\u00A0quit"
 
         footer_lines = textwrap.wrap(raw_tips, max(20, width - 4)) or [raw_tips]
         footer_height = len(footer_lines)
@@ -383,7 +421,14 @@ def draw_menu(stdscr):
                 pr_issues = pr_st["has_review_issues"]
                 pr_conflict = pr_st["needs_update"]
 
-                if s.get("is_unassigned_pr"):
+                sid = s.get("id") or s.get("name", "").split("/")[-1]
+                pre_acts = details_cache.get(sid, {}).get("activities")
+                is_stuck, stuck_reason = check_session_stuck_or_plan_loop(sid, preloaded_activities=pre_acts)
+
+                if is_stuck:
+                    color = curses.color_pair(6) | curses.A_BOLD  # Red background for plan loop / stuck
+                    display_state = f"{stuck_reason}"
+                elif s.get("is_unassigned_pr"):
                     color = curses.color_pair(1) | curses.A_BOLD
                     display_state = "UNASSIGNED_PR 🌿"
                 elif pr_failed or pr_issues or pr_conflict:
@@ -550,6 +595,19 @@ def draw_menu(stdscr):
         elif key in (ord('v'), ord('V')):
             action_msg = prompt_archived_panel(stdscr)
             last_fetch = 0
+        elif key in (ord('u'), ord('U')) and sessions_cache:
+            curr_s = sessions_cache[selected_idx]
+            sid = curr_s.get("id") or curr_s.get("name", "").split("/")[-1]
+            if prompt_confirm(stdscr, f"Unstuck session #{selected_idx + 1}?"):
+                msg_txt = "Re-evaluating task: Line 393 in paru-wrapper already uses double quotes around \"$@\". Run tests, finalize PR, and submit."
+                res = send_message(sid, msg_txt)
+                last_fetch = 0
+                if "error" not in res:
+                    action_msg = f"⚡ Sent un-stick instruction to session #{selected_idx + 1}"
+                else:
+                    action_msg = f"Error sending un-stick message: {res.get('error')}"
+            else:
+                action_msg = "Cancelled un-sticking session."
         elif key in (ord('r'), ord('R')):
             last_fetch = 0
             action_msg = "Refreshed session list."
