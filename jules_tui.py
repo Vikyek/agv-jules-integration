@@ -29,6 +29,32 @@ def save_config(cfg):
     with open(CONFIG_FILE, "w") as f:
         json.dump(cfg, f, indent=2)
 
+def check_session_has_pr(session):
+    """Checks if a PR has been created for the given session."""
+    if not session:
+        return False
+    sid = session.get("id") or session.get("name", "").split("/")[-1]
+    src_ctx = session.get("sourceContext", {})
+    rep_name = src_ctx.get("source", "").replace("sources/github/", "").replace("sources/", "")
+    if not rep_name:
+        rep_name = "paru-wrapper"
+    projects_dir = os.path.expanduser("~/Projects")
+    repo_path = os.path.join(projects_dir, os.path.basename(rep_name))
+    if not os.path.exists(os.path.join(repo_path, ".git")):
+        return False
+    try:
+        res = subprocess.run(["gh", "pr", "list", "--state", "all", "--json", "number,title,headRefName,url"], cwd=repo_path, capture_output=True, text=True)
+        if res.returncode == 0:
+            prs = json.loads(res.stdout)
+            for pr in prs:
+                branch = pr.get("headRefName", "")
+                title = pr.get("title", "")
+                if sid in branch or sid in title or branch.endswith(sid):
+                    return True
+    except Exception:
+        pass
+    return False
+
 def open_session_pr(session):
     """Looks up and opens the GitHub PR associated with the task/session if created."""
     if not session:
@@ -227,12 +253,20 @@ def draw_menu(stdscr):
                 clean_title = raw_title.lstrip("#").strip().replace("\n", " ")
                 title = clean_title
 
-                if "COMPLETED" in state or "SUCCEEDED" in state or "RESOLVED" in state or "ARCHIVED" in state:
+                has_pr = check_session_has_pr(s)
+
+                if ("COMPLETED" in state or "SUCCEEDED" in state or "RESOLVED" in state or "ARCHIVED" in state) and has_pr:
+                    color = curses.color_pair(2)
+                    display_state = "PR_CREATED 🔗"
+                elif "COMPLETED" in state or "SUCCEEDED" in state or "RESOLVED" in state or "ARCHIVED" in state:
                     color = curses.color_pair(2)
                     display_state = state
                 elif "FEEDBACK" in state or "INPUT" in state or "REVIEW" in state or "PAUSED" in state:
                     color = curses.color_pair(6) | curses.A_BOLD  # Highlighted Red background with Black text
                     display_state = f"{state} ⚠️"
+                elif ("IN_PROGRESS" in state or "RUNNING" in state) and has_pr:
+                    color = curses.color_pair(1) | curses.A_BOLD
+                    display_state = f"PR_CREATED {braille_icon}"
                 elif "IN_PROGRESS" in state or "RUNNING" in state:
                     color = curses.color_pair(1) | curses.A_BOLD
                     display_state = f"{state} {braille_icon}"
