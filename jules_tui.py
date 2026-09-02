@@ -54,6 +54,24 @@ def save_config(cfg):
     with open(CONFIG_FILE, "w") as f:
         json.dump(cfg, f, indent=2)
 
+_AGY_ACTIONS_CACHE = {}
+_AGY_ACTIONS_CACHE_TIME = 0
+
+def load_agy_actions_cached():
+    global _AGY_ACTIONS_CACHE, _AGY_ACTIONS_CACHE_TIME
+    now = time.time()
+    if now - _AGY_ACTIONS_CACHE_TIME < 1.5:
+        return _AGY_ACTIONS_CACHE
+    try:
+        log_file = os.path.expanduser("~/.config/jules/agy_actions.json")
+        if os.path.exists(log_file):
+            with open(log_file, "r") as f:
+                _AGY_ACTIONS_CACHE = json.load(f)
+                _AGY_ACTIONS_CACHE_TIME = now
+    except Exception:
+        pass
+    return _AGY_ACTIONS_CACHE
+
 def check_session_stuck_or_plan_loop(session_id, preloaded_activities=None):
     """
     Inspects session activity stream to detect if worker is stuck or trapped in a plan/patch loop
@@ -87,23 +105,20 @@ def check_session_stuck_or_plan_loop(session_id, preloaded_activities=None):
         # Check persistent action log for UNSTUCK_PROMPT timestamp_epoch
         last_unstuck_epoch = 0
         try:
-            log_file = os.path.expanduser("~/.config/jules/agy_actions.json")
-            if os.path.exists(log_file):
-                with open(log_file, "r") as f:
-                    all_actions = json.load(f)
-                    events = all_actions.get(session_id, [])
-                    for ev in reversed(events):
-                        if ev.get("action") in ("UNSTUCK_PROMPT", "AUTO_REPLY") or "unstuck" in ev.get("message", "").lower():
-                            last_unstuck_epoch = ev.get("timestamp_epoch", 0)
-                            if not last_unstuck_epoch and ev.get("timestamp"):
-                                import datetime
-                                try:
-                                    dt = datetime.datetime.strptime(ev["timestamp"], "%Y-%m-%d %H:%M:%S")
-                                    last_unstuck_epoch = dt.timestamp()
-                                except Exception:
-                                    pass
-                            if last_unstuck_epoch > 0:
-                                break
+            all_actions = load_agy_actions_cached()
+            events = all_actions.get(session_id, [])
+            for ev in reversed(events):
+                if ev.get("action") in ("UNSTUCK_PROMPT", "AUTO_REPLY") or "unstuck" in ev.get("message", "").lower():
+                    last_unstuck_epoch = ev.get("timestamp_epoch", 0)
+                    if not last_unstuck_epoch and ev.get("timestamp"):
+                        import datetime
+                        try:
+                            dt = datetime.datetime.strptime(ev["timestamp"], "%Y-%m-%d %H:%M:%S")
+                            last_unstuck_epoch = dt.timestamp()
+                        except Exception:
+                            pass
+                    if last_unstuck_epoch > 0:
+                        break
         except Exception:
             pass
 
@@ -458,20 +473,34 @@ def draw_menu(stdscr):
     svc_str = "STOPPED"
     auto_str = "DISABLED"
 
+    # Async systemctl status checker to eliminate UI thread blocking
+    svc_check_lock = threading.Lock()
+    def check_svc_bg():
+        nonlocal svc_active, svc_str, auto_enabled, auto_str
+        try:
+            svc_check = subprocess.run(["systemctl", "--user", "is-active", "jules-listener.service"], capture_output=True, text=True)
+            active = svc_check.stdout.strip() == "active"
+            auto_check = subprocess.run(["systemctl", "--user", "is-enabled", "jules-listener.service"], capture_output=True, text=True)
+            enabled = "enabled" in auto_check.stdout.strip()
+            with svc_check_lock:
+                svc_active = active
+                svc_str = "RUNNING" if active else "STOPPED"
+                auto_enabled = enabled
+                auto_str = "ENABLED" if enabled else "DISABLED"
+        except Exception:
+            pass
+
+    # Initial async trigger
+    threading.Thread(target=check_svc_bg, daemon=True).start()
+
     while True:
         stdscr.erase()
         height, width = stdscr.getmaxyx()
 
         now_t = time.time()
-        if now_t - last_svc_check_time > 2.0:
+        if now_t - last_svc_check_time > 3.0:
             last_svc_check_time = now_t
-            svc_check = subprocess.run(["systemctl", "--user", "is-active", "jules-listener.service"], capture_output=True, text=True)
-            svc_active = svc_check.stdout.strip() == "active"
-            svc_str = "RUNNING" if svc_active else "STOPPED"
-
-            auto_check = subprocess.run(["systemctl", "--user", "is-enabled", "jules-listener.service"], capture_output=True, text=True)
-            auto_enabled = "enabled" in auto_check.stdout.strip()
-            auto_str = "ENABLED" if auto_enabled else "DISABLED"
+            threading.Thread(target=check_svc_bg, daemon=True).start()
 
         # Unexpected Service Stop Detection
         unexpected_stop = (not svc_active) and (prev_svc_active is True) and (not user_stopped_service)
@@ -517,12 +546,18 @@ def draw_menu(stdscr):
         raw_footer_lines = textwrap.wrap(full_tips, max(20, width - 4)) or [full_tips]
         footer_lines = [l.strip().lstrip("|").rstrip("|").strip() for l in raw_footer_lines]
         footer_height = len(footer_lines)
+        stuck_frame_cache = {}
+        def get_stuck_info(sid):
+            if sid not in stuck_frame_cache:
+                pre_acts = details_cache.get(sid, {}).get("activities")
+                stuck_frame_cache[sid] = check_session_stuck_or_plan_loop(sid, preloaded_activities=pre_acts)
+            return stuck_frame_cache[sid]
+
         # Priority sort sessions: 0) Running/In-Progress -> 1) Completed/PR Created -> 2) Awaiting Input -> 3) Errored/Stuck
         def get_session_priority(s_item):
             st = str(s_item.get("state", "")).upper()
             sid = s_item.get("id") or s_item.get("name", "").split("/")[-1]
-            pre_acts = details_cache.get(sid, {}).get("activities")
-            is_stuck, _ = check_session_stuck_or_plan_loop(sid, preloaded_activities=pre_acts)
+            is_stuck, _ = get_stuck_info(sid)
             pr_st = pr_status_cache.get(sid, {})
             pr_failed = pr_st.get("status_checks_failing", False)
 
@@ -538,6 +573,7 @@ def draw_menu(stdscr):
                 return 4
 
         if sessions_cache:
+            selected_idx = max(0, min(selected_idx, len(sessions_cache) - 1))
             curr_sel_sid = sessions_cache[selected_idx].get("id") if selected_idx < len(sessions_cache) else None
             sessions_cache = sorted(sessions_cache, key=get_session_priority)
             if curr_sel_sid:
@@ -545,6 +581,9 @@ def draw_menu(stdscr):
                     if (s_elem.get("id") or s_elem.get("name", "").split("/")[-1]) == curr_sel_sid:
                         selected_idx = idx_s
                         break
+        else:
+            selected_idx = 0
+            scroll_top = 0
 
         # Draw active session table
         stdscr.addstr(3, 1, "ACTIVE SESSIONS:", curses.A_BOLD)
@@ -557,6 +596,7 @@ def draw_menu(stdscr):
         if not sessions_cache:
             stdscr.addstr(5, 2, "No active sessions found.", curses.color_pair(3))
         else:
+            selected_idx = max(0, min(selected_idx, len(sessions_cache) - 1))
             if selected_idx < scroll_top:
                 scroll_top = selected_idx
 
@@ -602,8 +642,7 @@ def draw_menu(stdscr):
                 pr_issues = pr_st["has_review_issues"]
                 pr_conflict = pr_st["needs_update"]
 
-                pre_acts = details_cache.get(sid, {}).get("activities")
-                is_stuck, stuck_reason = check_session_stuck_or_plan_loop(sid, preloaded_activities=pre_acts)
+                is_stuck, stuck_reason = get_stuck_info(sid)
 
                 if is_stuck:
                     color = curses.color_pair(6) | curses.A_BOLD
@@ -878,10 +917,8 @@ def prompt_confirm(stdscr, question):
         stdscr.refresh()
         ch = _get_key_with_mouse_wheel(stdscr)
         if ch in (ord('y'), ord('Y')):
-            stdscr.timeout(1000)
             return True
         elif ch in (ord('n'), ord('N'), 27):
-            stdscr.timeout(1000)
             return False
 
 # Persistent Task Queue & Status Dictionary (Max 2 concurrent AGY processes)
@@ -1124,7 +1161,6 @@ def prompt_suggestion_details_panel(stdscr, sug, agy_status=""):
         ch = _get_key_with_mouse_wheel(stdscr)
 
         if ch == 27:  # ESC
-            stdscr.timeout(1000)
             return "Returned to suggestions panel."
         elif ch in (curses.KEY_UP, ord('k')) and scroll_top > 0:
             scroll_top -= 1
@@ -1191,14 +1227,6 @@ def prompt_suggestions_panel(stdscr, preloaded_suggestions=None):
         stdscr.erase()
         spin_idx = (spin_idx + 1) % len(spinner_frames)
         spin_char = spinner_frames[spin_idx]
-
-        current_selected_title = suggestions[selected_idx].get("title") if suggestions and selected_idx < len(suggestions) else None
-        suggestions = sort_suggestions_by_priority(suggestions)
-        if current_selected_title:
-            for idx_s, sg in enumerate(suggestions):
-                if sg.get("title") == current_selected_title:
-                    selected_idx = idx_s
-                    break
 
         # Calculate active (uncompleted) suggestion count
         active_count = len([
@@ -1353,7 +1381,7 @@ def prompt_suggestions_panel(stdscr, preloaded_suggestions=None):
                 sug_row_map[i] = (start_y, end_y)
 
         stdscr.refresh()
-        stdscr.timeout(50)
+        stdscr.timeout(150)
         ch = _get_key_with_mouse_wheel(stdscr)
 
         if ch == curses.KEY_MOUSE:
@@ -1362,7 +1390,6 @@ def prompt_suggestions_panel(stdscr, preloaded_suggestions=None):
                 if not (bstate & (curses.BUTTON1_CLICKED | curses.BUTTON1_RELEASED)):
                     continue
                 if my >= height - sug_footer_height:
-                    stdscr.timeout(1000)
                     return "Returned to active sessions."
                 else:
                     for idx_item, (sy, ey) in sug_row_map.items():
@@ -1684,7 +1711,6 @@ def prompt_action_history_panel(stdscr, filter_suggestions_only=False):
         stdscr.refresh()
         ch = _get_key_with_mouse_wheel(stdscr)
         if ch == 27:  # ESC key
-            stdscr.timeout(1000)
             return "Returned."
 
 def prompt_archived_suggestions_panel(stdscr):
@@ -1754,7 +1780,6 @@ def prompt_archived_suggestions_panel(stdscr):
         ch = _get_key_with_mouse_wheel(stdscr)
 
         if ch == 27:  # ESC key
-            stdscr.timeout(1000)
             return "Returned to suggestions panel."
         elif ch in (curses.KEY_UP, ord('k')) and selected_idx > 0:
             selected_idx -= 1
@@ -1884,7 +1909,6 @@ def prompt_archived_panel(stdscr, preloaded_archived=None):
         ch = _get_key_with_mouse_wheel(stdscr)
 
         if ch == 27:  # ESC key
-            stdscr.timeout(1000)
             return "Returned to active sessions."
         elif ch in (curses.KEY_UP, ord('k')) and selected_idx > 0:
             selected_idx -= 1
@@ -2077,7 +2101,6 @@ def prompt_reply(stdscr, session_id, local_num, preloaded_data=None):
                 status_err = ""
                 continue
             else:
-                stdscr.timeout(1000)
                 return "Exited session inspection panel."
         elif not reply_active and ch in (ord('r'), ord('R')):
             reply_active = True
@@ -2089,7 +2112,6 @@ def prompt_reply(stdscr, session_id, local_num, preloaded_data=None):
         elif not reply_active and ch in (ord('a'), ord('A')):
             if prompt_confirm(stdscr, f"Archive session #{local_num}?"):
                 archive_session(session_id)
-                stdscr.timeout(1000)
                 return f"Archived session #{local_num}"
             else:
                 status_err = "Cancelled archiving session."
@@ -2097,7 +2119,6 @@ def prompt_reply(stdscr, session_id, local_num, preloaded_data=None):
         elif reply_active and ch in (curses.KEY_ENTER, 10, 13):
             if input_text.strip():
                 res = send_message(session_id, input_text.strip())
-                stdscr.timeout(1000)
                 if "error" not in res:
                     return f"Sent response to session {session_id[:12]}"
                 return f"Error sending message: {res.get('error')}"
