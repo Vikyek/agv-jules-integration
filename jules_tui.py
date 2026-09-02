@@ -324,6 +324,7 @@ def draw_menu(stdscr):
             pass
 
     selected_idx = 0
+    scroll_top = 0
     sessions_cache = []
     archived_sessions_cache = []
     suggestions_cache = []
@@ -489,8 +490,14 @@ def draw_menu(stdscr):
         if not sessions_cache:
             stdscr.addstr(5, 2, "No active sessions found.", curses.color_pair(3))
         else:
-            for i in range(len(sessions_cache)):
-                if curr_y >= 4 + available_height:
+            # Adjust viewport scroll_top offset to keep selected_idx visible on screen
+            if selected_idx < scroll_top:
+                scroll_top = selected_idx
+            elif selected_idx >= scroll_top + available_height:
+                scroll_top = selected_idx - available_height + 1
+
+            for i in range(scroll_top, len(sessions_cache)):
+                if curr_y >= 5 + available_height:
                     break
 
                 start_y = curr_y
@@ -533,7 +540,10 @@ def draw_menu(stdscr):
                     elif pr_conflict:
                         display_state = "PR_CONFLICT ⚠️"
                     else:
-                        display_state = "PR_ISSUES ⚠️"
+                        display_state = "PR_REVIEW_ISSUE ⚠️"
+                elif "AWAITING" in state:
+                    color = curses.color_pair(6) | curses.A_BOLD  # Highlighted Red background with Black text
+                    display_state = "USER_INPUT_REQ ⚡"
                 elif ("COMPLETED" in state or "SUCCEEDED" in state or "RESOLVED" in state or "ARCHIVED" in state) and has_pr:
                     color = curses.color_pair(2)
                     display_state = "PR_CREATED 🔗"
@@ -583,7 +593,7 @@ def draw_menu(stdscr):
 
                 # Draw wrapped title lines indented under the title column
                 for extra_line in wrapped_title[1:]:
-                    if curr_y >= 4 + available_height:
+                    if curr_y >= 5 + available_height:
                         break
                     indented_line = f"{' ' * meta_len}{extra_line}"[:width-2]
                     if i == selected_idx:
@@ -1008,6 +1018,7 @@ def prompt_suggestions_panel(stdscr, preloaded_suggestions=None):
     from jules_scraper import fetch_jules_suggestions, load_dismissed_suggestions
     stdscr.timeout(-1)
     selected_idx = 0
+    scroll_top = 0
     selected_set = set()
     status_msg = ""
     spinner_frames = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
@@ -1070,9 +1081,17 @@ def prompt_suggestions_panel(stdscr, preloaded_suggestions=None):
             if selected_idx >= len(suggestions):
                 selected_idx = max(0, len(suggestions) - 1)
 
-            for i, sug in enumerate(suggestions):
+            # Adjust viewport scroll_top offset to keep selected_idx visible on screen
+            if selected_idx < scroll_top:
+                scroll_top = selected_idx
+            elif selected_idx >= scroll_top + (available_height // 2):
+                scroll_top = max(0, selected_idx - (available_height // 2) + 1)
+
+            for i in range(scroll_top, len(suggestions)):
                 if curr_y >= 2 + available_height:
                     break
+
+                sug = suggestions[i]
 
                 title = sug.get("title", "Untitled Suggestion")
                 details = sug.get("details", "")
@@ -1463,6 +1482,7 @@ def prompt_archived_suggestions_panel(stdscr):
     """Displays a dedicated full-screen Archived/Completed Suggestions panel."""
     stdscr.timeout(-1)
     selected_idx = 0
+    scroll_top = 0
     status_msg = ""
 
     while True:
@@ -1497,9 +1517,17 @@ def prompt_archived_suggestions_panel(stdscr):
             if selected_idx >= len(dismissed_set):
                 selected_idx = max(0, len(dismissed_set) - 1)
 
-            for i, sug_title in enumerate(dismissed_set):
+            # Adjust viewport scroll_top offset to keep selected_idx visible on screen
+            if selected_idx < scroll_top:
+                scroll_top = selected_idx
+            elif selected_idx >= scroll_top + available_height:
+                scroll_top = selected_idx - available_height + 1
+
+            for i in range(scroll_top, len(dismissed_set)):
                 if curr_y >= 2 + available_height:
                     break
+
+                sug_title = dismissed_set[i]
 
                 prefix = ">" if i == selected_idx else " "
                 line1 = f"{prefix} [#{i+1}] [COMPLETED/ARCHIVED ✅] {sug_title}"[:width-2]
@@ -1543,6 +1571,7 @@ def prompt_archived_panel(stdscr, preloaded_archived=None):
     """Displays a dedicated full-screen Archived Sessions Collection panel (stored archived session objects with auto vs manual tags)."""
     stdscr.timeout(-1)
     selected_idx = 0
+    scroll_top = 0
     status_msg = ""
 
     # Load persistent action log to check manual vs auto archiving tags
@@ -1589,7 +1618,13 @@ def prompt_archived_panel(stdscr, preloaded_archived=None):
             if selected_idx >= len(archived_sessions):
                 selected_idx = max(0, len(archived_sessions) - 1)
 
-            for i in range(len(archived_sessions)):
+            # Adjust viewport scroll_top offset to keep selected_idx visible on screen
+            if selected_idx < scroll_top:
+                scroll_top = selected_idx
+            elif selected_idx >= scroll_top + available_height:
+                scroll_top = selected_idx - available_height + 1
+
+            for i in range(scroll_top, len(archived_sessions)):
                 if curr_y >= 2 + available_height:
                     break
 
