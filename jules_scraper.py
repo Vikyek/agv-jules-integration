@@ -68,7 +68,7 @@ def fetch_sourcery_pr_suggestions():
         try:
             res = subprocess.run(
                 ["gh", "pr", "list", "--state", "all", "--json", "number,title,comments,reviews", "-R", repo],
-                capture_output=True, text=True
+                capture_output=True, text=True, timeout=3
             )
             if res.returncode == 0 and res.stdout.strip().startswith("["):
                 prs = json.loads(res.stdout)
@@ -111,13 +111,13 @@ def fetch_sourcery_pr_suggestions():
         except Exception:
             pass
 
-    # Fallback to local git repository commit history for Sourcery refactor logs if API is rate limited
+    # Fallback to local git repository commit history for Sourcery refactor logs if API is rate limited or timed out
     if not suggestions:
         for clean_repo in ["paru-wrapper", "agv-jules-integration"]:
             repo_dir = os.path.expanduser(f"~/Projects/{clean_repo}")
             if os.path.exists(os.path.join(repo_dir, ".git")):
                 try:
-                    g_res = subprocess.run(["git", "log", "-n", "50", "--oneline"], cwd=repo_dir, capture_output=True, text=True)
+                    g_res = subprocess.run(["git", "log", "-n", "50", "--oneline"], cwd=repo_dir, capture_output=True, text=True, timeout=2)
                     if g_res.returncode == 0:
                         for line in g_res.stdout.splitlines():
                             if any(k in line.lower() for k in ["sourcery", "refactor", "health", "exception", "security", "perf", "merge pull request"]):
@@ -159,7 +159,7 @@ def fetch_jules_suggestions(raw_html_snippet=None, filter_dismissed=True):
         url = "https://jules.google.com/session"
         req = urllib.request.Request(url, headers=headers)
         try:
-            with urllib.request.urlopen(req, timeout=10) as resp:
+            with urllib.request.urlopen(req, timeout=2) as resp:
                 html_content = resp.read().decode("utf-8")
         except Exception:
             pass
