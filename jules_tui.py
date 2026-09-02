@@ -782,6 +782,7 @@ def prompt_suggestions_panel(stdscr):
         available_height = height - 4 - (1 if status_msg else 0)
         curr_y = 2
 
+        sug_row_map = {}
         if not suggestions:
             stdscr.addstr(3, 2, "No proactive suggestions found.", curses.color_pair(3))
         else:
@@ -796,6 +797,7 @@ def prompt_suggestions_panel(stdscr):
                 details = sug.get("details", "")
                 repo = sug.get("repo", "Vikyek/paru-wrapper")
 
+                start_y = curr_y
                 prefix = ">" if i == selected_idx else " "
                 line1 = f"{prefix} [#{i+1}] [{repo}] {title}"[:width-2]
 
@@ -815,11 +817,38 @@ def prompt_suggestions_panel(stdscr):
                     stdscr.addstr(curr_y, 1, detail_line)
                     stdscr.attroff(curses.color_pair(7 if i != selected_idx else 5))
                     curr_y += 1
+                end_y = curr_y - 1
+                sug_row_map[i] = (start_y, end_y)
 
         stdscr.refresh()
         ch = stdscr.getch()
 
-        if ch == 27:  # ESC key
+        if ch == curses.KEY_MOUSE:
+            try:
+                _, mx, my, _, bstate = curses.getmouse()
+                if my == height - 1:
+                    # Footer click -> return to main menu
+                    stdscr.timeout(1000)
+                    return "Returned to active sessions."
+                else:
+                    for idx_item, (sy, ey) in sug_row_map.items():
+                        if sy <= my <= ey:
+                            if selected_idx == idx_item:
+                                # Second click on same item -> launch interactive AGY window
+                                curr_sug = suggestions[selected_idx]
+                                task_title = curr_sug.get("title", "")
+                                task_details = curr_sug.get("details", "")
+                                repo_name = curr_sug.get("repo", "Vikyek/paru-wrapper")
+                                prompt_str = f"/plan {task_title}: {task_details} in {repo_name}"
+                                import subprocess
+                                subprocess.Popen(["i3-msg", "exec", "--no-startup-id", f"/usr/sbin/kitty --title 'AGY - {task_title[:20]}' -e /usr/sbin/agy -i '{prompt_str}'"])
+                                status_msg = f"🚀 Launched interactive AGY /plan window for suggestion #{selected_idx + 1}"
+                            else:
+                                selected_idx = idx_item
+                            break
+            except Exception:
+                pass
+        elif ch == 27:  # ESC key
             stdscr.timeout(1000)
             return "Returned to active sessions."
         elif ch == curses.KEY_UP and selected_idx > 0:
