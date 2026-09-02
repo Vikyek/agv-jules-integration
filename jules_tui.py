@@ -1167,11 +1167,11 @@ def prompt_suggestions_panel(stdscr):
             else:
                 status_msg = "Cancelled dismissal."
         elif ch in (ord('h'), ord('H')):
-            prompt_action_history_panel(stdscr)
-            status_msg = "Returned from Global Action History log."
+            prompt_action_history_panel(stdscr, filter_suggestions_only=True)
+            status_msg = "Returned from Suggestions History log."
         elif ch in (ord('v'), ord('V')):
-            prompt_archived_sessions_panel(stdscr)
-            status_msg = "Returned from Archived Sessions collection."
+            prompt_archived_suggestions_panel(stdscr)
+            status_msg = "Returned from Archived Suggestions collection."
         elif ch in (ord('j'), ord('J')) and suggestions:
             curr_sug = suggestions[selected_idx]
             task_title = curr_sug.get("title", "")
@@ -1192,7 +1192,7 @@ def prompt_suggestions_panel(stdscr):
             else:
                 status_msg = f"Error creating session: {res.get('error')}"
 
-def prompt_action_history_panel(stdscr):
+def prompt_action_history_panel(stdscr, filter_suggestions_only=False):
     """Displays a dedicated full-screen Global Action History Log panel specifying Title, Repo, Branch, and Action Type."""
     stdscr.timeout(-1)
     while True:
@@ -1200,12 +1200,13 @@ def prompt_action_history_panel(stdscr):
         stdscr.clear()
 
         # Header
-        header = " 📜 GLOBAL ACTION & EVENT HISTORY LOG "
+        panel_label = "SUGGESTIONS ACTION & EVENT HISTORY" if filter_suggestions_only else "GLOBAL ACTION & EVENT HISTORY LOG"
+        header = f" 📜 {panel_label} "
         stdscr.attron(curses.color_pair(5) | curses.A_BOLD)
         stdscr.addstr(0, 0, header[:width].center(width))
         stdscr.attroff(curses.color_pair(5) | curses.A_BOLD)
 
-        footer_tips = "Press [ESC] to return to active sessions list"
+        footer_tips = "Press [ESC] to return to previous panel"
         stdscr.attron(curses.color_pair(1))
         stdscr.addstr(height - 1, 0, footer_tips.center(width)[:width-1])
         stdscr.attroff(curses.color_pair(1))
@@ -1219,10 +1220,17 @@ def prompt_action_history_panel(stdscr):
                     all_actions = json.load(f)
                     for sid, events in all_actions.items():
                         for ev in events:
+                            act = ev.get("action", "EVENT")
+                            is_sug_event = "SUGGESTION" in act or "VERIFICATION" in act
+                            if filter_suggestions_only and not is_sug_event:
+                                continue
+                            elif not filter_suggestions_only and is_sug_event:
+                                continue
+
                             log_entries.append({
                                 "session_id": sid,
                                 "timestamp": ev.get("timestamp", ""),
-                                "action": ev.get("action", "EVENT"),
+                                "action": act,
                                 "message": ev.get("message", ""),
                                 "title": ev.get("title", ""),
                                 "repo": ev.get("repo", ""),
@@ -1236,14 +1244,15 @@ def prompt_action_history_panel(stdscr):
         log_entries.sort(key=lambda x: x.get("timestamp", ""), reverse=True)
 
         stdscr.attron(curses.color_pair(3) | curses.A_BOLD)
-        stdscr.addstr(2, 2, "RECORDED ACTIONS (TITLE, REPO, BRANCH & ACTION METADATA):")
+        label_text = "RECORDED SUGGESTION ACTIONS:" if filter_suggestions_only else "RECORDED SESSION ACTIONS:"
+        stdscr.addstr(2, 2, f"{label_text} (TITLE, REPO, BRANCH & ACTION METADATA):")
         stdscr.attroff(curses.color_pair(3) | curses.A_BOLD)
 
         max_line_width = max(20, width - 6)
         formatted_lines = []
 
         if not log_entries:
-            formatted_lines.append("No recorded action history found.")
+            formatted_lines.append("No recorded action history found for this view.")
         else:
             for item in log_entries:
                 ts = item["timestamp"]
@@ -1276,7 +1285,87 @@ def prompt_action_history_panel(stdscr):
         ch = stdscr.getch()
         if ch == 27:  # ESC key
             stdscr.timeout(1000)
-            return "Returned to active sessions."
+            return "Returned."
+
+def prompt_archived_suggestions_panel(stdscr):
+    """Displays a dedicated full-screen Archived/Completed Suggestions panel."""
+    stdscr.timeout(-1)
+    selected_idx = 0
+    status_msg = ""
+
+    while True:
+        height, width = stdscr.getmaxyx()
+        stdscr.clear()
+
+        # Header
+        header = " 📦 ARCHIVED & COMPLETED SUGGESTIONS COLLECTION "
+        stdscr.attron(curses.color_pair(5) | curses.A_BOLD)
+        stdscr.addstr(0, 0, header[:width].center(width))
+        stdscr.attroff(curses.color_pair(5) | curses.A_BOLD)
+
+        from jules_scraper import load_dismissed_suggestions
+        dismissed_set = list(load_dismissed_suggestions())
+
+        footer_tips = "Keybindings: [r] restore suggestion | [ESC] return to suggestions panel"
+        stdscr.attron(curses.color_pair(1))
+        stdscr.addstr(height - 1, 0, footer_tips.center(width)[:width-1])
+        stdscr.attroff(curses.color_pair(1))
+
+        if status_msg:
+            stdscr.attron(curses.color_pair(3) | curses.A_BOLD)
+            stdscr.addstr(height - 2, 2, status_msg[:width-4])
+            stdscr.attroff(curses.color_pair(3) | curses.A_BOLD)
+
+        available_height = height - 4 - (1 if status_msg else 0)
+        curr_y = 2
+
+        if not dismissed_set:
+            stdscr.addstr(3, 2, "No archived or dismissed suggestions found.", curses.color_pair(3))
+        else:
+            if selected_idx >= len(dismissed_set):
+                selected_idx = max(0, len(dismissed_set) - 1)
+
+            for i, sug_title in enumerate(dismissed_set):
+                if curr_y >= 2 + available_height:
+                    break
+
+                prefix = ">" if i == selected_idx else " "
+                line1 = f"{prefix} [#{i+1}] [COMPLETED/ARCHIVED ✅] {sug_title}"[:width-2]
+                if i == selected_idx:
+                    stdscr.attron(curses.color_pair(5) | curses.A_BOLD)
+                    stdscr.addstr(curr_y, 1, line1)
+                    stdscr.attroff(curses.color_pair(5) | curses.A_BOLD)
+                else:
+                    stdscr.attron(curses.color_pair(2))
+                    stdscr.addstr(curr_y, 1, line1)
+                    stdscr.attroff(curses.color_pair(2))
+                curr_y += 1
+
+        stdscr.refresh()
+        ch = stdscr.getch()
+
+        if ch == 27:  # ESC key
+            stdscr.timeout(1000)
+            return "Returned to suggestions panel."
+        elif ch == curses.KEY_UP and selected_idx > 0:
+            selected_idx -= 1
+        elif ch == curses.KEY_DOWN and selected_idx < len(dismissed_set) - 1:
+            selected_idx += 1
+        elif ch in (ord('r'), ord('R')) and dismissed_set:
+            title_to_restore = dismissed_set[selected_idx]
+            if prompt_confirm(stdscr, f"Restore suggestion '{title_to_restore}'?"):
+                try:
+                    dismiss_file = os.path.expanduser("~/.config/jules/dismissed_suggestions.json")
+                    if os.path.exists(dismiss_file):
+                        with open(dismiss_file, "r") as f:
+                            items = json.load(f)
+                        if title_to_restore in items:
+                            items.remove(title_to_restore)
+                            with open(dismiss_file, "w") as f:
+                                json.dump(items, f, indent=2)
+                    status_msg = f"Restored suggestion #{selected_idx + 1}"
+                except Exception as e:
+                    status_msg = f"Error restoring: {e}"
 
 def prompt_archived_panel(stdscr):
     """Displays a dedicated full-screen Archived Sessions Collection panel (stored archived session objects with auto vs manual tags)."""
