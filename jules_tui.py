@@ -1237,10 +1237,6 @@ def prompt_suggestions_panel(stdscr, preloaded_suggestions=None):
                         stdscr.attron(curses.color_pair(7) | curses.A_BOLD)
                         stdscr.addstr(curr_y, 1, line1)
                         stdscr.attroff(curses.color_pair(7) | curses.A_BOLD)
-                    elif is_completed_or_verified:
-                        stdscr.attron(curses.color_pair(7))
-                        stdscr.addstr(curr_y, 1, line1)
-                        stdscr.attroff(curses.color_pair(7))
                     else:
                         stdscr.attron(curses.color_pair(1))
                         stdscr.addstr(curr_y, 1, line1)
