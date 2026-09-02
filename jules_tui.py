@@ -869,9 +869,9 @@ def prompt_suggestions_panel(stdscr):
                         stdscr.addstr(curr_y, 1, line1)
                         stdscr.attroff(curses.color_pair(5) | curses.A_BOLD)
                     elif is_selected:
-                        stdscr.attron(curses.color_pair(2) | curses.A_BOLD)
+                        stdscr.attron(curses.color_pair(7) | curses.A_BOLD)
                         stdscr.addstr(curr_y, 1, line1)
-                        stdscr.attroff(curses.color_pair(2) | curses.A_BOLD)
+                        stdscr.attroff(curses.color_pair(7) | curses.A_BOLD)
                     else:
                         stdscr.attron(curses.color_pair(1))
                         stdscr.addstr(curr_y, 1, line1)
@@ -880,9 +880,9 @@ def prompt_suggestions_panel(stdscr):
                 curr_y += 1
                 if details and 0 <= curr_y < height - 2:
                     detail_line = f"       ↳ {details}"[:width-4]
-                    stdscr.attron(curses.color_pair(7 if i != selected_idx else 5))
+                    stdscr.attron(curses.color_pair(3 if i != selected_idx else 5))
                     stdscr.addstr(curr_y, 1, detail_line)
-                    stdscr.attroff(curses.color_pair(7 if i != selected_idx else 5))
+                    stdscr.attroff(curses.color_pair(3 if i != selected_idx else 5))
                     curr_y += 1
                 elif details:
                     curr_y += 1
