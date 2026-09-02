@@ -386,7 +386,7 @@ def draw_menu(stdscr):
     view_archived = False
 
     while True:
-        stdscr.clear()
+        stdscr.erase()
         height, width = stdscr.getmaxyx()
 
         # Check service status live
@@ -760,7 +760,7 @@ def prompt_suggestions_panel(stdscr):
 
     while True:
         height, width = stdscr.getmaxyx()
-        stdscr.clear()
+        stdscr.erase()
 
         header = " 💡 JUL̇ES PROACTIVE TASK SUGGESTIONS "
         stdscr.attron(curses.color_pair(5) | curses.A_BOLD)
