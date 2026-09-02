@@ -870,10 +870,10 @@ def prompt_suggestions_panel(stdscr):
                                 flags = f"--mode {agy_mode}"
                                 if skip_perms:
                                     flags += " --dangerously-skip-permissions"
-                                escaped_title = task_title.replace("'", "'\\''")
-                                cmd_script = f"/usr/sbin/agy {flags} -p '{prompt_str}' && python3 -c 'from jules_scraper import dismiss_suggestion; dismiss_suggestion(\"{escaped_title}\")'"
+                                escaped_title = task_title.replace("'", "\\'")
+                                runner_bin = os.path.expanduser("~/.local/bin/jules-suggestion-runner")
                                 import subprocess
-                                subprocess.Popen(["i3-msg", f"exec --no-startup-id /usr/sbin/kitty --title 'AGY - {task_title[:20]}' bash -c \"{cmd_script}\""])
+                                subprocess.Popen(["i3-msg", f"exec --no-startup-id /usr/sbin/kitty --title 'AGY - {task_title[:20]}' {runner_bin} '{task_title}' run '{prompt_str}' '{flags}'"])
                                 status_msg = f"🚀 Launched non-interactive AGY ({agy_mode}) task for suggestion #{selected_idx + 1}"
                             else:
                                 selected_idx = idx_item
@@ -904,13 +904,10 @@ def prompt_suggestions_panel(stdscr):
             if skip_perms:
                 flags += " --dangerously-skip-permissions"
 
-            # Run AGY non-interactively (-p) and auto-report success back to TUI dismiss registry
-            escaped_title = task_title.replace("'", "'\\''")
-            cmd_script = f"/usr/sbin/agy {flags} -p '{prompt_str}' && python3 -c 'from jules_scraper import dismiss_suggestion; dismiss_suggestion(\"{escaped_title}\")'"
-
             try:
                 import subprocess
-                cmd = ["i3-msg", f"exec --no-startup-id /usr/sbin/kitty --title 'AGY - {task_title[:20]}' bash -c \"{cmd_script}\""]
+                runner_bin = os.path.expanduser("~/.local/bin/jules-suggestion-runner")
+                cmd = ["i3-msg", f"exec --no-startup-id /usr/sbin/kitty --title 'AGY - {task_title[:20]}' {runner_bin} '{task_title}' run '{prompt_str}' '{flags}'"]
                 subprocess.Popen(cmd)
                 status_msg = f"🚀 Launched non-interactive AGY ({agy_mode}) task for suggestion #{selected_idx + 1}"
             except Exception as e:
@@ -930,12 +927,10 @@ def prompt_suggestions_panel(stdscr):
             if skip_perms:
                 flags += " --dangerously-skip-permissions"
 
-            escaped_title = task_title.replace("'", "\\'")
-            cmd_script = f"echo 'Checking: {task_title}...'; /usr/sbin/agy {flags} -p \"{check_prompt}\" | grep -qi 'SUCCESS' && python3 -c 'from jules_scraper import dismiss_suggestion; dismiss_suggestion(\"{escaped_title}\")'; read -p 'Press Enter to close...'"
-
             try:
                 import subprocess
-                cmd = ["i3-msg", f"exec --no-startup-id /usr/sbin/kitty --title 'AGY Check - {task_title[:20]}' bash -c \"{cmd_script}\""]
+                runner_bin = os.path.expanduser("~/.local/bin/jules-suggestion-runner")
+                cmd = ["i3-msg", f"exec --no-startup-id /usr/sbin/kitty --title 'AGY Check - {task_title[:20]}' {runner_bin} '{task_title}' check '{check_prompt}' '{flags}'"]
                 subprocess.Popen(cmd)
                 status_msg = f"🔍 Launched AGY verification check for suggestion #{selected_idx + 1}"
             except Exception as e:
