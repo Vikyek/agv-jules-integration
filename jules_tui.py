@@ -1276,6 +1276,10 @@ def prompt_suggestions_panel(stdscr, preloaded_suggestions=None):
                 status_msg = "Deselected all suggestions."
             else:
                 selected_set = set(active_indices)
+                if active_indices:
+                    selected_idx = min(active_indices)
+                    if selected_idx < scroll_top:
+                        scroll_top = selected_idx
                 status_msg = f"✅ Selected all ({len(selected_set)}) active suggestions."
         elif ch in (ord('g'), ord('G'), curses.KEY_ENTER, 10, 13) and suggestions:
             dismissed_set = load_dismissed_suggestions()
