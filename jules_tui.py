@@ -517,6 +517,34 @@ def draw_menu(stdscr):
         raw_footer_lines = textwrap.wrap(full_tips, max(20, width - 4)) or [full_tips]
         footer_lines = [l.strip().lstrip("|").rstrip("|").strip() for l in raw_footer_lines]
         footer_height = len(footer_lines)
+        # Priority sort sessions: 0) Running/In-Progress -> 1) Completed/PR Created -> 2) Awaiting Input -> 3) Errored/Stuck
+        def get_session_priority(s_item):
+            st = str(s_item.get("state", "")).upper()
+            sid = s_item.get("id") or s_item.get("name", "").split("/")[-1]
+            pre_acts = details_cache.get(sid, {}).get("activities")
+            is_stuck, _ = check_session_stuck_or_plan_loop(sid, preloaded_activities=pre_acts)
+            pr_st = pr_status_cache.get(sid, {})
+            pr_failed = pr_st.get("status_checks_failing", False)
+
+            if "IN_PROGRESS" in st or "RUNNING" in st:
+                return 0
+            elif "COMPLETED" in st or "SUCCEEDED" in st or "RESOLVED" in st or "ARCHIVED" in st or pr_st.get("has_pr"):
+                return 1
+            elif "AWAITING" in st or "INPUT" in st or "REVIEW" in st or "FEEDBACK" in st:
+                return 2
+            elif is_stuck or pr_failed or "ERROR" in st or "FAILED" in st:
+                return 3
+            else:
+                return 4
+
+        if sessions_cache:
+            curr_sel_sid = sessions_cache[selected_idx].get("id") if selected_idx < len(sessions_cache) else None
+            sessions_cache = sorted(sessions_cache, key=get_session_priority)
+            if curr_sel_sid:
+                for idx_s, s_elem in enumerate(sessions_cache):
+                    if (s_elem.get("id") or s_elem.get("name", "").split("/")[-1]) == curr_sel_sid:
+                        selected_idx = idx_s
+                        break
 
         # Draw active session table
         stdscr.addstr(3, 1, "ACTIVE SESSIONS:", curses.A_BOLD)
