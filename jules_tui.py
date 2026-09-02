@@ -790,17 +790,22 @@ def prompt_suggestions_panel(stdscr):
     selected_idx = 0
     status_msg = ""
     agy_task_status = {}
+    spinner_frames = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
+    spin_idx = 0
 
     while True:
         height, width = stdscr.getmaxyx()
         stdscr.erase()
+        spin_idx = (spin_idx + 1) % len(spinner_frames)
+        spin_char = spinner_frames[spin_idx]
 
         header = " 💡 JUL̇ES PROACTIVE TASK SUGGESTIONS "
         stdscr.attron(curses.color_pair(5) | curses.A_BOLD)
         stdscr.addstr(0, 0, header[:width].center(width))
         stdscr.attroff(curses.color_pair(5) | curses.A_BOLD)
 
-        suggestions = fetch_jules_suggestions()
+        # Do not filter out dismissed suggestions so completed items stay visible until explicit refresh [r]
+        suggestions = fetch_jules_suggestions(filter_dismissed=False)
 
         long_sug_tips = "Keybindings: [g] start AGY | [c] check if done | [j] start Jules | [r] refresh | [x] dismiss | [ESC] return"
         if len(long_sug_tips) <= width - 2:
@@ -858,12 +863,28 @@ def prompt_suggestions_panel(stdscr):
                 elif details:
                     curr_y += 1
 
+                from jules_scraper import load_dismissed_suggestions
+                dismissed_set = load_dismissed_suggestions()
+
                 if agy_task_status.get(title) and 0 <= curr_y < height - 2:
-                    status_info = agy_task_status[title]
+                    raw_info = agy_task_status[title]
+                    if raw_info == "RUNNING":
+                        status_info = f"RUNNING {spin_char}"
+                    elif raw_info == "VERIFYING":
+                        status_info = f"VERIFYING {spin_char}"
+                    else:
+                        status_info = raw_info
+
                     status_line = f"     ⚡ AGY Task Status: [{status_info}]"[:width-4]
-                    stdscr.attron(curses.color_pair(3 if "ERROR" in status_info or "FAILED" in status_info else 1))
+                    stdscr.attron(curses.color_pair(3 if "ERROR" in status_info or "FAILED" in status_info else (2 if "DONE" in status_info or "COMPLETED" in status_info else 1)))
                     stdscr.addstr(curr_y, 1, status_line)
-                    stdscr.attroff(curses.color_pair(3 if "ERROR" in status_info or "FAILED" in status_info else 1))
+                    stdscr.attroff(curses.color_pair(3 if "ERROR" in status_info or "FAILED" in status_info else (2 if "DONE" in status_info or "COMPLETED" in status_info else 1)))
+                    curr_y += 1
+                elif title.strip() in dismissed_set and 0 <= curr_y < height - 2:
+                    status_line = "     ⚡ AGY Task Status: [COMPLETED ✅]"[:width-4]
+                    stdscr.attron(curses.color_pair(2))
+                    stdscr.addstr(curr_y, 1, status_line)
+                    stdscr.attroff(curses.color_pair(2))
                     curr_y += 1
                 elif agy_task_status.get(title):
                     curr_y += 1
@@ -872,7 +893,7 @@ def prompt_suggestions_panel(stdscr):
                 sug_row_map[i] = (start_y, end_y)
 
         stdscr.refresh()
-        stdscr.timeout(200)
+        stdscr.timeout(150)
         ch = stdscr.getch()
 
         if ch == curses.KEY_MOUSE:
@@ -917,8 +938,8 @@ def prompt_suggestions_panel(stdscr):
             if skip_perms:
                 flags += " --dangerously-skip-permissions"
 
-            def run_agy_task(title, prompt, flg):
-                agy_task_status[title] = "RUNNING ⏳"
+            def run_agy_task(title, prompt, flg, r_name):
+                agy_task_status[title] = "RUNNING"
                 try:
                     import shlex
                     cmd_args = ["/usr/sbin/agy"] + shlex.split(flg) + ["-p", prompt]
@@ -927,12 +948,13 @@ def prompt_suggestions_panel(stdscr):
                         from jules_scraper import dismiss_suggestion
                         dismiss_suggestion(title)
                         agy_task_status[title] = "COMPLETED ✅"
+                        log_action_event(title, r_name, "main", "AGY_SUGGESTION_RUN")
                     else:
                         agy_task_status[title] = f"FAILED ✖ (code {res.returncode})"
                 except Exception as e:
                     agy_task_status[title] = f"ERROR 🚨 ({e})"
 
-            threading.Thread(target=run_agy_task, args=(task_title, prompt_str, flags), daemon=True).start()
+            threading.Thread(target=run_agy_task, args=(task_title, prompt_str, flags, repo_name), daemon=True).start()
             status_msg = f"🚀 Started non-blocking AGY ({agy_mode}) task for suggestion #{selected_idx + 1}"
         elif ch in (ord('c'), ord('C')) and suggestions:
             curr_sug = suggestions[selected_idx]
@@ -950,8 +972,8 @@ def prompt_suggestions_panel(stdscr):
             if skip_perms:
                 flags += " --dangerously-skip-permissions"
 
-            def check_agy_task(title, prompt, flg):
-                agy_task_status[title] = "VERIFYING 🔍"
+            def check_agy_task(title, prompt, flg, r_name):
+                agy_task_status[title] = "VERIFYING"
                 try:
                     import shlex
                     cmd_args = ["/usr/sbin/agy"] + shlex.split(flg) + ["-p", prompt]
@@ -960,14 +982,16 @@ def prompt_suggestions_panel(stdscr):
                         from jules_scraper import dismiss_suggestion
                         dismiss_suggestion(title)
                         agy_task_status[title] = "VERIFIED DONE ✅"
+                        log_action_event(title, r_name, "main", "AGY_VERIFICATION_CHECK")
                     else:
                         agy_task_status[title] = "INCOMPLETE ℹ️"
                 except Exception as e:
                     agy_task_status[title] = f"ERROR 🚨 ({e})"
 
-            threading.Thread(target=check_agy_task, args=(task_title, check_prompt, flags), daemon=True).start()
+            threading.Thread(target=check_agy_task, args=(task_title, check_prompt, flags, repo_name), daemon=True).start()
             status_msg = f"🔍 Started non-blocking AGY verification check for suggestion #{selected_idx + 1}"
         elif ch in (ord('r'), ord('R')):
+            from jules_scraper import load_dismissed_suggestions
             status_msg = "🔄 Refreshed proactive suggestions list."
         elif ch in (ord('x'), ord('X')) and suggestions:
             curr_sug = suggestions[selected_idx]

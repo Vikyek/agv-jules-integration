@@ -54,15 +54,15 @@ def dismiss_suggestion(title):
     with open(DISMISSED_FILE, "w") as f:
         json.dump(list(dismissed), f, indent=2)
 
-def fetch_jules_suggestions(raw_html_snippet=None):
+def fetch_jules_suggestions(raw_html_snippet=None, filter_dismissed=True):
     """
     Scrapes or fetches all Jules suggestions (including class="suggestion-info" and class="suggestion-title" elements)
     from https://jules.google.com/session or stored HTML snippets/configurations.
-    Filters out dismissed suggestions.
+    Filters out dismissed suggestions if filter_dismissed is True.
     Returns list of suggestion dictionaries.
     """
     import re
-    dismissed_titles = load_dismissed_suggestions()
+    dismissed_titles = load_dismissed_suggestions() if filter_dismissed else set()
     suggestions = []
     
     html_content = raw_html_snippet
