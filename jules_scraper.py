@@ -141,7 +141,7 @@ def fetch_sourcery_pr_suggestions():
         except Exception:
             pass
 
-    # Fallback to local git repository commit history for Sourcery refactor logs if API is rate limited or timed out
+    # Fallback to local git repository commit history for code health refactor logs if API is rate limited or timed out
     if not suggestions:
         for clean_repo in ["paru-wrapper", "jules-manager"]:
             repo_dir = os.path.expanduser(f"~/Projects/{clean_repo}")
@@ -150,16 +150,16 @@ def fetch_sourcery_pr_suggestions():
                     g_res = subprocess.run(["git", "log", "-n", "50", "--oneline"], cwd=repo_dir, capture_output=True, text=True, timeout=2)
                     if g_res.returncode == 0:
                         for line in g_res.stdout.splitlines():
-                            if any(k in line.lower() for k in ["sourcery", "refactor", "health", "exception", "security", "perf", "merge pull request"]):
+                            if any(k in line.lower() for k in ["refactor", "health", "exception", "security", "perf", "merge pull request"]):
                                 parts = line.strip().split(" ", 1)
                                 if len(parts) == 2:
                                     c_hash, c_msg = parts
-                                    stitle = f"Sourcery PR/Health ({c_hash}): {c_msg[:60]}"
+                                    stitle = f"Code Health ({c_hash}): {c_msg[:60]}"
                                     if stitle not in seen_titles:
                                         seen_titles.add(stitle)
                                         suggestions.append({
                                             "title": stitle,
-                                            "details": f"Sourcery PR & code health recommendation: {c_msg}",
+                                            "details": f"Code health recommendation: {c_msg}",
                                             "repo": f"Vikyek/{clean_repo}",
                                             "source": "git_commit_log"
                                         })
@@ -281,13 +281,23 @@ def fetch_jules_suggestions(raw_html_snippet=None, filter_dismissed=True):
             }
         ]
 
+    # Filter out any Sourcery feedback requests or rate prompts
+    feedback_phrases = ["leave feedback", "how did sourcery do", "rate this suggestion", "sourcery feedback", "how did sourcery"]
+    valid_scraped = [
+        s for s in suggestions
+        if not any(p in (s.get("title", "") + " " + s.get("details", "")).lower() for p in feedback_phrases)
+    ]
+
     # Save newly scraped suggestions to disk
-    save_persistent_suggestions(suggestions)
+    save_persistent_suggestions(valid_scraped)
 
     # Load all stored historical suggestions from disk to ensure persistence across reruns
     all_stored = load_persistent_suggestions()
-    combined_map = {s.get("title", "").strip(): s for s in (all_stored + suggestions) if isinstance(s, dict) and s.get("title")}
-    final_suggestions = list(combined_map.values())
+    combined_map = {s.get("title", "").strip(): s for s in (all_stored + valid_scraped) if isinstance(s, dict) and s.get("title")}
+    final_suggestions = [
+        s for s in combined_map.values()
+        if not any(p in (s.get("title", "") + " " + s.get("details", "")).lower() for p in feedback_phrases)
+    ]
 
     return [s for s in final_suggestions if s.get("title", "").strip() not in dismissed_titles]
 
