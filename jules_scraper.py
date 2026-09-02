@@ -107,6 +107,8 @@ def fetch_sourcery_pr_suggestions():
                         author = comment.get("author", {}).get("login", "")
                         body = comment.get("body", "")
                         if "sourcery" in author.lower() or "sourcery" in body.lower():
+                            if any(phrase in body.lower() for phrase in ["leave feedback", "how did sourcery do", "rate this suggestion", "sourcery feedback"]):
+                                continue
                             lines = [l.strip() for l in body.splitlines() if l.strip() and not l.strip().startswith("<") and not l.strip().startswith("-")]
                             clean_body = " ".join(lines[:3]) if lines else body[:180]
                             stitle = f"Sourcery PR #{pr_num}: {clean_body[:60]}"
@@ -123,6 +125,8 @@ def fetch_sourcery_pr_suggestions():
                         author = review.get("author", {}).get("login", "")
                         body = review.get("body", "")
                         if ("sourcery" in author.lower() or "sourcery" in body.lower()) and body.strip():
+                            if any(phrase in body.lower() for phrase in ["leave feedback", "how did sourcery do", "rate this suggestion", "sourcery feedback"]):
+                                continue
                             lines = [l.strip() for l in body.splitlines() if l.strip() and not l.strip().startswith("<") and not l.strip().startswith("-")]
                             clean_body = " ".join(lines[:3]) if lines else body[:180]
                             stitle = f"Sourcery Review PR #{pr_num}: {clean_body[:60]}"
