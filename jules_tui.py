@@ -781,6 +781,60 @@ def prompt_confirm(stdscr, question):
             stdscr.timeout(1000)
             return False
 
+# Persistent Task Queue & Status Dictionary (Max 2 concurrent AGY processes)
+import queue
+task_queue = queue.Queue()
+agy_task_status = {}
+MAX_CONCURRENT_AGY = 2
+
+def agy_worker():
+    while True:
+        item = task_queue.get()
+        if item is None:
+            break
+        task_type, title, prompt, flg, r_name = item
+        clean_repo = r_name.split("/")[-1] if "/" in r_name else r_name
+        target_cwd = os.path.expanduser(f"~/Projects/{clean_repo}")
+        if not os.path.exists(target_cwd):
+            target_cwd = os.path.expanduser("~/Projects/paru-wrapper")
+
+        if task_type == "VERIFY":
+            agy_task_status[title] = "VERIFYING"
+            try:
+                import shlex
+                cmd_args = ["/usr/sbin/agy"] + shlex.split(flg) + ["-p", prompt]
+                res = subprocess.run(cmd_args, cwd=target_cwd, capture_output=True, text=True)
+                if "SUCCESS" in res.stdout.upper():
+                    from jules_scraper import dismiss_suggestion
+                    dismiss_suggestion(title)
+                    agy_task_status[title] = "VERIFIED DONE ✅"
+                    log_action_event(title, r_name, "main", "AGY_VERIFICATION_CHECK")
+                else:
+                    agy_task_status[title] = "INCOMPLETE ℹ️"
+            except Exception as e:
+                agy_task_status[title] = f"ERROR 🚨 ({e})"
+        else:
+            agy_task_status[title] = "RUNNING"
+            try:
+                import shlex
+                cmd_args = ["/usr/sbin/agy"] + shlex.split(flg) + ["-p", prompt]
+                res = subprocess.run(cmd_args, cwd=target_cwd, capture_output=True, text=True)
+                if res.returncode == 0:
+                    from jules_scraper import dismiss_suggestion
+                    dismiss_suggestion(title)
+                    agy_task_status[title] = "COMPLETED ✅"
+                    log_action_event(title, r_name, "main", "AGY_SUGGESTION_RUN")
+                else:
+                    err_reason = res.stderr.strip() or res.stdout.strip()[-60:] or f"code {res.returncode}"
+                    agy_task_status[title] = f"FAILED ✖ ({err_reason})"
+            except Exception as e:
+                agy_task_status[title] = f"ERROR 🚨 ({e})"
+
+        task_queue.task_done()
+
+for _ in range(MAX_CONCURRENT_AGY):
+    threading.Thread(target=agy_worker, daemon=True).start()
+
 def prompt_suggestions_panel(stdscr):
     """
     Displays a dedicated full-screen Jules Suggestions panel displaying all scraped class="suggestion-info" elements.
@@ -791,63 +845,8 @@ def prompt_suggestions_panel(stdscr):
     selected_idx = 0
     selected_set = set()
     status_msg = ""
-    agy_task_status = {}
     spinner_frames = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
     spin_idx = 0
-
-    # Thread-safe Task Queue Worker (Max 2 concurrent AGY processes)
-    import queue
-    task_queue = queue.Queue()
-    MAX_CONCURRENT_AGY = 2
-
-    def agy_worker():
-        while True:
-            item = task_queue.get()
-            if item is None:
-                break
-            task_type, title, prompt, flg, r_name = item
-            clean_repo = r_name.split("/")[-1] if "/" in r_name else r_name
-            target_cwd = os.path.expanduser(f"~/Projects/{clean_repo}")
-            if not os.path.exists(target_cwd):
-                target_cwd = os.path.expanduser("~/Projects/paru-wrapper")
-
-            if task_type == "VERIFY":
-                agy_task_status[title] = "VERIFYING"
-                try:
-                    import shlex
-                    cmd_args = ["/usr/sbin/agy"] + shlex.split(flg) + ["-p", prompt]
-                    res = subprocess.run(cmd_args, cwd=target_cwd, capture_output=True, text=True)
-                    if "SUCCESS" in res.stdout.upper():
-                        from jules_scraper import dismiss_suggestion
-                        dismiss_suggestion(title)
-                        agy_task_status[title] = "VERIFIED DONE ✅"
-                        log_action_event(title, r_name, "main", "AGY_VERIFICATION_CHECK")
-                    else:
-                        agy_task_status[title] = "INCOMPLETE ℹ️"
-                except Exception as e:
-                    agy_task_status[title] = f"ERROR 🚨 ({e})"
-            else:
-                agy_task_status[title] = "RUNNING"
-                try:
-                    import shlex
-                    cmd_args = ["/usr/sbin/agy"] + shlex.split(flg) + ["-p", prompt]
-                    res = subprocess.run(cmd_args, cwd=target_cwd, capture_output=True, text=True)
-                    if res.returncode == 0:
-                        from jules_scraper import dismiss_suggestion
-                        dismiss_suggestion(title)
-                        agy_task_status[title] = "COMPLETED ✅"
-                        log_action_event(title, r_name, "main", "AGY_SUGGESTION_RUN")
-                    else:
-                        err_reason = res.stderr.strip() or res.stdout.strip()[-60:] or f"code {res.returncode}"
-                        agy_task_status[title] = f"FAILED ✖ ({err_reason})"
-                except Exception as e:
-                    agy_task_status[title] = f"ERROR 🚨 ({e})"
-
-            task_queue.task_done()
-
-    # Start fixed pool of worker threads
-    for _ in range(MAX_CONCURRENT_AGY):
-        threading.Thread(target=agy_worker, daemon=True).start()
 
     while True:
         height, width = stdscr.getmaxyx()
