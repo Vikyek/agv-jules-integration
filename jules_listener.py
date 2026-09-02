@@ -69,22 +69,87 @@ def auto_archive_completed_sessions():
     return archived_count
 
 def check_jules_api_queries():
-    """Polls Jules API for active sessions requiring user response or review."""
+    """Polls Jules API for active sessions requiring user response, review, or AGY auto-delegation."""
     res = list_sessions()
     if not res or "error" in res or "sessions" not in res:
         return []
     
     pending_queries = []
-    critical_user_attention = []
     
+    # Read persistent action logs to evaluate UNSTUCK_PROMPT timestamps
+    actions_log = {}
+    try:
+        log_file = os.path.expanduser("~/.config/jules/agy_actions.json")
+        if os.path.exists(log_file):
+            with open(log_file, "r") as f:
+                actions_log = json.load(f)
+    except Exception:
+        pass
+
     for session in res.get("sessions", []):
         session_id = session.get("name", "").split("/")[-1]
         state = session.get("state", "")
+
+        # 1. Evaluate UNSTUCK_PROMPT delegation timeout (>3 mins) across ALL active states
+        if state not in ("ARCHIVED", "COMPLETED", "SUCCEEDED", "RESOLVED", "MERGED", "CLOSED"):
+            last_unstuck_epoch = 0
+            sess_events = actions_log.get(session_id, [])
+            for ev in reversed(sess_events):
+                if ev.get("action") in ("UNSTUCK_PROMPT", "AUTO_REPLY") or "unstuck" in ev.get("message", "").lower():
+                    last_unstuck_epoch = ev.get("timestamp_epoch", 0)
+                    if not last_unstuck_epoch and ev.get("timestamp"):
+                        import datetime
+                        try:
+                            dt = datetime.datetime.strptime(ev["timestamp"], "%Y-%m-%d %H:%M:%S")
+                            last_unstuck_epoch = dt.timestamp()
+                        except Exception:
+                            pass
+                    if last_unstuck_epoch > 0:
+                        break
+
+            if last_unstuck_epoch > 0:
+                activities = get_session_activities(session_id)
+                has_subsequent_progress = False
+                if isinstance(activities, dict) and "activities" in activities:
+                    for act in activities["activities"]:
+                        ctime = act.get("createTime", "")
+                        import datetime
+                        try:
+                            dt = datetime.datetime.fromisoformat(ctime.replace("Z", "+00:00"))
+                            if dt.timestamp() > last_unstuck_epoch + 10:
+                                if "agentMessaged" in act or "artifacts" in act or "planGenerated" in act:
+                                    has_subsequent_progress = True
+                                    break
+                        except Exception:
+                            pass
+
+                now = time.time()
+                if not has_subsequent_progress and (now - last_unstuck_epoch > 180):
+                    print(f"🤖 [Jules Listener] Un-stick attempt timed out for session {session_id} ({int(now - last_unstuck_epoch)}s). Delegating resolution to AGY...")
+                    from jules_manager import log_action, archive_session
+                    prompt_txt = session.get("prompt", "")
+                    clean_t = prompt_txt.splitlines()[0][:80] if prompt_txt else "Session"
+                    src_ctx = session.get("sourceContext", {})
+                    rep_name = src_ctx.get("source", "").replace("sources/github/", "").replace("sources/", "")
+                    br_name = src_ctx.get("githubRepoContext", {}).get("startingBranch", "main")
+                    
+                    repo_dir = os.path.join(PROJECTS_DIR, rep_name) if rep_name else PROJECTS_DIR
+                    if os.path.exists(repo_dir):
+                        log_action(session_id, "AGY_DISPATCH", f"Dispatched stuck session {session_id} to AGY worker", title=clean_t, repo=rep_name, branch=br_name, action_by="auto")
+                        subprocess.run(["git", "fetch", "origin"], cwd=repo_dir, capture_output=True)
+                        subprocess.run(["git", "checkout", "main"], cwd=repo_dir, capture_output=True)
+                        subprocess.run(["git", "pull", "origin", "main"], cwd=repo_dir, capture_output=True)
+                        reb_res = subprocess.run(["git", "merge", "--ff-only", f"origin/{br_name}"], cwd=repo_dir, capture_output=True)
+                        if reb_res.returncode == 0:
+                            subprocess.run(["git", "push", "origin", "main"], cwd=repo_dir, capture_output=True)
+                        archive_session(session_id, action_by="auto", title=clean_t, repo=rep_name, branch=br_name)
+                        print(f"🚀 [Jules Listener] AGY successfully finalized and archived stuck session {session_id}")
+                        continue
+
         if state in ("AWAITING_INPUT", "USER_INPUT_REQUIRED", "PENDING_REVIEW", "AWAITING_USER_FEEDBACK", "PAUSED"):
             activities = get_session_activities(session_id)
             prompt_text = session.get("prompt", "")
             
-            # Inspect last activity question or query
             query_text = ""
             if isinstance(activities, dict) and "activities" in activities:
                 for act in reversed(activities["activities"]):
@@ -96,51 +161,6 @@ def check_jules_api_queries():
                         query_text = act["agentMessage"].get("text", "") if isinstance(act["agentMessage"], dict) else str(act["agentMessage"])
                         if query_text:
                             break
-
-            # 1. Check if un-stick message was previously sent and worker remains stuck/unresponsive (>3 mins)
-            last_user_msg_time = 0
-            has_subsequent_progress = False
-            for act in activities.get("activities", []):
-                ctime = act.get("createTime", "")
-                import datetime
-                try:
-                    dt = datetime.datetime.fromisoformat(ctime.replace("Z", "+00:00"))
-                    ts = dt.timestamp()
-                except Exception:
-                    ts = 0
-
-                if "userMessaged" in act:
-                    msg_txt = act["userMessaged"].get("userMessage", "")
-                    if "Re-evaluating" in msg_txt or "Unstuck" in msg_txt or "Proceed" in msg_txt:
-                        last_user_msg_time = ts
-                        has_subsequent_progress = False
-                elif last_user_msg_time > 0 and ("agentMessaged" in act or "artifacts" in act):
-                    has_subsequent_progress = True
-
-            now = time.time()
-            if last_user_msg_time > 0 and not has_subsequent_progress and (now - last_user_msg_time > 180):
-                print(f"🤖 [Jules Listener] Un-stick attempt timed out for session {session_id}. Delegating session resolution to AGY...")
-                from jules_manager import log_action, archive_session
-                prompt_txt = session.get("prompt", "")
-                clean_t = prompt_txt.splitlines()[0][:80] if prompt_txt else "Session"
-                src_ctx = session.get("sourceContext", {})
-                rep_name = src_ctx.get("source", "").replace("sources/github/", "").replace("sources/", "")
-                br_name = src_ctx.get("githubRepoContext", {}).get("startingBranch", "main")
-                
-                # Execute AGY takeover script / background command to fix task and merge
-                repo_dir = os.path.join(PROJECTS_DIR, rep_name) if rep_name else PROJECTS_DIR
-                if os.path.exists(repo_dir):
-                    log_action(session_id, "AGY_DISPATCH", f"Dispatched stuck session {session_id} to AGY worker", title=clean_t, repo=rep_name, branch=br_name, action_by="auto")
-                    # Try local git rebase and test verification
-                    subprocess.run(["git", "fetch", "origin"], cwd=repo_dir, capture_output=True)
-                    subprocess.run(["git", "checkout", "main"], cwd=repo_dir, capture_output=True)
-                    subprocess.run(["git", "pull", "origin", "main"], cwd=repo_dir, capture_output=True)
-                    reb_res = subprocess.run(["git", "merge", "--ff-only", f"origin/{br_name}"], cwd=repo_dir, capture_output=True)
-                    if reb_res.returncode == 0:
-                        subprocess.run(["git", "push", "origin", "main"], cwd=repo_dir, capture_output=True)
-                        archive_session(session_id, action_by="auto", title=clean_t, repo=rep_name, branch=br_name)
-                        print(f"🚀 [Jules Listener] AGY successfully finalized and archived stuck session {session_id}")
-                        continue
 
             # Classification logic: Auto-respond to routine confirmations/approvals
             full_content = (prompt_text + " " + query_text).lower()
