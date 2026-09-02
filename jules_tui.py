@@ -870,9 +870,11 @@ def prompt_suggestions_panel(stdscr):
                                 flags = f"--mode {agy_mode}"
                                 if skip_perms:
                                     flags += " --dangerously-skip-permissions"
+                                escaped_title = task_title.replace("'", "'\\''")
+                                cmd_script = f"/usr/sbin/agy {flags} -p '{prompt_str}' && python3 -c 'from jules_scraper import dismiss_suggestion; dismiss_suggestion(\"{escaped_title}\")'"
                                 import subprocess
-                                subprocess.Popen(["i3-msg", f"exec --no-startup-id /usr/sbin/kitty --title 'AGY - {task_title[:20]}' -e /usr/sbin/agy {flags} -i '{prompt_str}'"])
-                                status_msg = f"🚀 Launched interactive AGY ({agy_mode}) window for suggestion #{selected_idx + 1}"
+                                subprocess.Popen(["i3-msg", f"exec --no-startup-id /usr/sbin/kitty --title 'AGY - {task_title[:20]}' bash -c \"{cmd_script}\""])
+                                status_msg = f"🚀 Launched non-interactive AGY ({agy_mode}) task for suggestion #{selected_idx + 1}"
                             else:
                                 selected_idx = idx_item
                             break
@@ -902,11 +904,15 @@ def prompt_suggestions_panel(stdscr):
             if skip_perms:
                 flags += " --dangerously-skip-permissions"
 
+            # Run AGY non-interactively (-p) and auto-report success back to TUI dismiss registry
+            escaped_title = task_title.replace("'", "'\\''")
+            cmd_script = f"/usr/sbin/agy {flags} -p '{prompt_str}' && python3 -c 'from jules_scraper import dismiss_suggestion; dismiss_suggestion(\"{escaped_title}\")'"
+
             try:
                 import subprocess
-                cmd = ["i3-msg", f"exec --no-startup-id /usr/sbin/kitty --title 'AGY - {task_title[:20]}' -e /usr/sbin/agy {flags} -i '{prompt_str}'"]
+                cmd = ["i3-msg", f"exec --no-startup-id /usr/sbin/kitty --title 'AGY - {task_title[:20]}' bash -c \"{cmd_script}\""]
                 subprocess.Popen(cmd)
-                status_msg = f"🚀 Launched interactive AGY ({agy_mode}) window for suggestion #{selected_idx + 1}"
+                status_msg = f"🚀 Launched non-interactive AGY ({agy_mode}) task for suggestion #{selected_idx + 1}"
             except Exception as e:
                 status_msg = f"Error launching AGY window: {e}"
         elif ch in (ord('x'), ord('X')) and suggestions:
