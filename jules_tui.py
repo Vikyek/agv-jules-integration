@@ -59,6 +59,37 @@ def check_session_stuck_or_plan_loop(session_id, preloaded_activities=None):
                             patch_fail_count += 1
                         duplicate_patch_signatures.add(patch_str)
 
+        # Check persistent action log for UNSTUCK_PROMPT timestamp_epoch
+        last_unstuck_epoch = 0
+        try:
+            log_file = os.path.expanduser("~/.config/jules/agy_actions.json")
+            if os.path.exists(log_file):
+                with open(log_file, "r") as f:
+                    all_actions = json.load(f)
+                    events = all_actions.get(session_id, [])
+                    for ev in reversed(events):
+                        if ev.get("action") in ("UNSTUCK_PROMPT", "AUTO_REPLY") or "unstuck" in ev.get("message", "").lower():
+                            last_unstuck_epoch = ev.get("timestamp_epoch", 0)
+                            if not last_unstuck_epoch and ev.get("timestamp"):
+                                import datetime
+                                try:
+                                    dt = datetime.datetime.strptime(ev["timestamp"], "%Y-%m-%d %H:%M:%S")
+                                    last_unstuck_epoch = dt.timestamp()
+                                except Exception:
+                                    pass
+                            if last_unstuck_epoch > 0:
+                                break
+        except Exception:
+            pass
+
+        if last_unstuck_epoch > 0:
+            import time
+            elapsed = max(0, int(time.time() - last_unstuck_epoch))
+            m = elapsed // 60
+            s = elapsed % 60
+            timer_str = f"{m:02d}m {s:02d}s"
+            return True, f"UNSTUCK ⏳ {timer_str}"
+
         if plan_count >= 2:
             return True, f"PLAN_LOOP 🔄 ({plan_count} plans)"
         if patch_fail_count >= 2:
@@ -608,11 +639,13 @@ def draw_menu(stdscr):
                 res = send_message(sid, msg_txt)
                 last_fetch = 0
                 if "error" not in res:
-                    action_msg = f"⚡ Sent un-stick instruction to session #{selected_idx + 1}"
+                    from jules_manager import log_action
+                    log_action(sid, "UNSTUCK_PROMPT", "Sent unstuck instruction", action_by="manual")
+                    action_msg = f"⚡ Sent unstuck instruction to session #{selected_idx + 1}"
                 else:
-                    action_msg = f"Error sending un-stick message: {res.get('error')}"
+                    action_msg = f"Error sending unstuck message: {res.get('error')}"
             else:
-                action_msg = "Cancelled un-sticking session."
+                action_msg = "Cancelled unstuck session."
         elif key in (ord('r'), ord('R')):
             last_fetch = 0
             action_msg = "Refreshed session list."

@@ -128,8 +128,10 @@ def log_action(session_id, action_type, message, title="", repo="", branch="", a
                     branch = src_ctx.get("githubRepoContext", {}).get("startingBranch", "main")
 
         import time
+        now_ts = time.time()
         actions[session_id].append({
             "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
+            "timestamp_epoch": now_ts,
             "action": action_type,
             "message": message,
             "title": title,
@@ -177,6 +179,9 @@ def main():
     archive_parser = subparsers.add_parser("archive-session", help="Archive a session")
     archive_parser.add_argument("--session-id", required=True, help="Session ID")
 
+    unarchive_parser = subparsers.add_parser("unarchive-session", help="Unarchive a session")
+    unarchive_parser.add_argument("--session-id", required=True, help="Session ID")
+
     args = parser.parse_args()
 
     if args.command == "list-sources":
@@ -191,6 +196,8 @@ def main():
         print(json.dumps(send_message(args.session_id, args.message), indent=2))
     elif args.command == "archive-session":
         print(json.dumps(archive_session(args.session_id), indent=2))
+    elif args.command == "unarchive-session":
+        print(json.dumps(unarchive_session(args.session_id), indent=2))
     else:
         parser.print_help()
 
