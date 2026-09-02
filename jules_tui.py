@@ -924,6 +924,15 @@ def prompt_suggestions_panel(stdscr):
             task_details = curr_sug.get("details", "")
             repo_name = curr_sug.get("repo", "Vikyek/paru-wrapper")
             
+            from jules_scraper import load_dismissed_suggestions
+            dismissed_set = load_dismissed_suggestions()
+            if task_title.strip() in dismissed_set or agy_task_status.get(task_title) in ("COMPLETED ✅", "VERIFIED DONE ✅"):
+                status_msg = f"⚠️ Suggestion #{selected_idx + 1} is already completed!"
+                continue
+            if agy_task_status.get(task_title) in ("RUNNING", "VERIFYING"):
+                status_msg = f"⚠️ Suggestion #{selected_idx + 1} is already running!"
+                continue
+
             cfg = load_config()
             agy_mode = cfg.get("agy_mode", "plan")
             skip_perms = cfg.get("agy_skip_permissions", True)
@@ -962,6 +971,15 @@ def prompt_suggestions_panel(stdscr):
             task_details = curr_sug.get("details", "")
             repo_name = curr_sug.get("repo", "Vikyek/paru-wrapper")
             
+            from jules_scraper import load_dismissed_suggestions
+            dismissed_set = load_dismissed_suggestions()
+            if task_title.strip() in dismissed_set or agy_task_status.get(task_title) in ("COMPLETED ✅", "VERIFIED DONE ✅"):
+                status_msg = f"⚠️ Suggestion #{selected_idx + 1} is already completed!"
+                continue
+            if agy_task_status.get(task_title) in ("RUNNING", "VERIFYING"):
+                status_msg = f"⚠️ Suggestion #{selected_idx + 1} is already verifying!"
+                continue
+
             cfg = load_config()
             skip_perms = cfg.get("agy_skip_permissions", True)
             
@@ -997,7 +1015,15 @@ def prompt_suggestions_panel(stdscr):
             from jules_scraper import load_dismissed_suggestions
             dismissed_set = load_dismissed_suggestions()
 
-            active_sugs = [s for s in suggestions if s.get("title", "").strip() not in dismissed_set]
+            active_sugs = [
+                s for s in suggestions
+                if s.get("title", "").strip() not in dismissed_set
+                and agy_task_status.get(s.get("title", "")) not in ("COMPLETED ✅", "VERIFIED DONE ✅", "RUNNING", "VERIFYING")
+            ]
+
+            if not active_sugs:
+                status_msg = "ℹ️ All suggestions are already completed or running!"
+                continue
 
             if prompt_confirm(stdscr, f"Start all ({len(active_sugs)}) pending suggestions?"):
                 for sug in active_sugs:
@@ -1050,6 +1076,13 @@ def prompt_suggestions_panel(stdscr):
             curr_sug = suggestions[selected_idx]
             task_title = curr_sug.get("title", "")
             repo_name = curr_sug.get("repo", "Vikyek/paru-wrapper")
+            
+            from jules_scraper import load_dismissed_suggestions
+            dismissed_set = load_dismissed_suggestions()
+            if task_title.strip() in dismissed_set or agy_task_status.get(task_title) in ("COMPLETED ✅", "VERIFIED DONE ✅"):
+                status_msg = f"⚠️ Suggestion #{selected_idx + 1} is already completed!"
+                continue
+
             from jules_manager import create_session
             res = create_session(task_title, f"sources/github/{repo_name}", "main")
             if "error" not in res:
