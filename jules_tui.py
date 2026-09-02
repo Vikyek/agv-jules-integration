@@ -466,7 +466,7 @@ def draw_menu(stdscr):
 
         # Header (Yellow background normally, Red background with Black text if unexpected stop or service stopped)
         header_color = curses.color_pair(6) | curses.A_BOLD if (not svc_active and not user_stopped_service) else curses.color_pair(4) | curses.A_BOLD
-        header_title = " 󱚝 JULES MANAGER " if width < 80 else " 󱚝 GOOGLE JULES API MANAGER & LISTENER TUI "
+        header_title = " 󱚝 JULES VANAGER " if width < 80 else " 󱚝 GOOGLE JULES API VANAGER & LISTENER TUI "
         stdscr.attron(header_color)
         stdscr.addstr(0, 0, header_title.center(width)[:width])
         stdscr.attroff(header_color)
