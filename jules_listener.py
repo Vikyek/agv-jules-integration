@@ -164,22 +164,31 @@ def check_and_handle_jules_prs(repo_path):
             or any(char.isdigit() for char in branch.split("-")[-1]) and len(branch.split("-")[-1]) >= 15
         )
         if is_jules:
-            comments_res = subprocess.run(["gh", "pr", "view", str(number), "--json", "comments,reviews"], cwd=repo_path, capture_output=True, text=True)
+            comments_res = subprocess.run(["gh", "pr", "view", str(number), "--json", "comments,reviews,statusCheckRollup,mergeable"], cwd=repo_path, capture_output=True, text=True)
             has_review_issues = False
             review_feedback = ""
+            status_checks_failing = False
+
             if comments_res.returncode == 0:
                 pr_detail = json.loads(comments_res.stdout)
+                mergeable = pr_detail.get("mergeable", mergeable)
                 for comment in pr_detail.get("comments", []):
                     body = comment.get("body", "")
-                    if "issue" in body.lower() or "issue_to_address" in body.lower() or "blocking findings" in body.lower():
+                    if any(kw in body.lower() for kw in ["issue", "issue_to_address", "blocking findings", "sourcery", "suggestion", "refactor", "conflict"]):
                         has_review_issues = True
                         review_feedback += f"\n--- Comment ---\n{body}"
                 for review in pr_detail.get("reviews", []):
                     body = review.get("body", "")
                     state = review.get("state", "")
-                    if state == "CHANGES_REQUESTED" or "blocking findings" in body.lower():
+                    if state == "CHANGES_REQUESTED" or any(kw in body.lower() for kw in ["blocking findings", "sourcery", "suggestion", "conflict"]):
                         has_review_issues = True
                         review_feedback += f"\n--- Review [{state}] ---\n{body}"
+                for check in pr_detail.get("statusCheckRollup", []):
+                    st = check.get("status", "")
+                    con = check.get("conclusion", "")
+                    if st == "COMPLETED" and con in ("FAILURE", "TIMED_OUT", "CANCELLED", "ACTION_REQUIRED"):
+                        status_checks_failing = True
+                        review_feedback += f"\n--- Failing Check ---\n{check.get('name', 'CI')}: {con}"
 
             py_files = glob.glob(os.path.join(repo_path, "*.py")) + glob.glob(os.path.join(repo_path, "scripts/*.py"))
             syntax_clean = True
@@ -194,14 +203,22 @@ def check_and_handle_jules_prs(repo_path):
                 if test_chk.returncode != 0:
                     syntax_clean = False
 
-            if syntax_clean and not has_review_issues:
+            # Strict Invariant: Do NOT merge or mark completed if failing checks, review issues/sourcery, conflicts, or needs branch updating
+            is_eligible_for_merge = (
+                syntax_clean 
+                and not has_review_issues 
+                and not status_checks_failing 
+                and mergeable in ("MERGEABLE", "CLEAN")
+            )
+
+            if is_eligible_for_merge:
                 # Attempt gh pr merge
                 merge_cmd = ["gh", "pr", "merge", str(number), "--merge", "--auto"]
                 m_res = subprocess.run(merge_cmd, cwd=repo_path, capture_output=True, text=True)
                 merged = m_res.returncode == 0
 
                 # Fallback: If gh pr merge fails (e.g. rate limit), try local git checkout & merge
-                if not merged and mergeable in ("MERGEABLE", "CLEAN", "UNKNOWN"):
+                if not merged and mergeable in ("MERGEABLE", "CLEAN"):
                     try:
                         subprocess.run(["git", "fetch", "origin"], cwd=repo_path, capture_output=True)
                         reb = subprocess.run(["git", "rebase", "origin/main", branch], cwd=repo_path, capture_output=True)
@@ -230,9 +247,7 @@ def check_and_handle_jules_prs(repo_path):
                             archive_session(possible_sid, action_by="auto", title=title, repo=r_name, branch=branch)
             else:
                 merged = False
-                if has_review_issues:
-                    print(f"⚠️ [Jules Listener] PR #{number} ({branch}) has unaddressed review comments/issues:")
-                    print(review_feedback[:500])
+                print(f"⚠️ [Jules Listener] PR #{number} ({branch}) is NOT eligible for merge (Checks failing: {status_checks_failing}, Review issues/Sourcery: {has_review_issues}, Mergeable: {mergeable})")
 
             jules_handled.append({
                 "repo": os.path.basename(repo_path),

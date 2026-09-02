@@ -29,10 +29,17 @@ def save_config(cfg):
     with open(CONFIG_FILE, "w") as f:
         json.dump(cfg, f, indent=2)
 
-def check_session_has_pr(session):
-    """Checks if a PR has been created for the given session."""
+def check_session_pr_status(session):
+    """
+    Checks PR details for a session, returning status flags:
+    has_pr, pr_number, status_checks_failing, has_review_issues, mergeable, needs_update, url
+    """
+    default_res = {
+        "has_pr": False, "pr_number": None, "status_checks_failing": False,
+        "has_review_issues": False, "mergeable": "UNKNOWN", "needs_update": False, "url": ""
+    }
     if not session:
-        return False
+        return default_res
     sid = session.get("id") or session.get("name", "").split("/")[-1]
     src_ctx = session.get("sourceContext", {})
     rep_name = src_ctx.get("source", "").replace("sources/github/", "").replace("sources/", "")
@@ -41,19 +48,58 @@ def check_session_has_pr(session):
     projects_dir = os.path.expanduser("~/Projects")
     repo_path = os.path.join(projects_dir, os.path.basename(rep_name))
     if not os.path.exists(os.path.join(repo_path, ".git")):
-        return False
+        return default_res
     try:
-        res = subprocess.run(["gh", "pr", "list", "--state", "all", "--json", "number,title,headRefName,url"], cwd=repo_path, capture_output=True, text=True)
+        res = subprocess.run(["gh", "pr", "list", "--state", "all", "--json", "number,title,headRefName,url,mergeable,reviewDecision,statusCheckRollup,comments,reviews"], cwd=repo_path, capture_output=True, text=True)
         if res.returncode == 0:
             prs = json.loads(res.stdout)
             for pr in prs:
                 branch = pr.get("headRefName", "")
                 title = pr.get("title", "")
                 if sid in branch or sid in title or branch.endswith(sid):
-                    return True
+                    num = pr.get("number")
+                    url = pr.get("url", "")
+                    mergeable = pr.get("mergeable", "UNKNOWN")
+                    review_decision = pr.get("reviewDecision", "")
+                    
+                    # 1. Check CI status checks
+                    checks_failing = False
+                    status_checks = pr.get("statusCheckRollup", [])
+                    for check in status_checks:
+                        st = check.get("status", "")
+                        con = check.get("conclusion", "")
+                        if st == "COMPLETED" and con in ("FAILURE", "TIMED_OUT", "CANCELLED", "ACTION_REQUIRED"):
+                            checks_failing = True
+                            break
+
+                    # 2. Check comments and review issues
+                    has_review_issues = review_decision in ("CHANGES_REQUESTED",)
+                    for comment in pr.get("comments", []):
+                        body = comment.get("body", "")
+                        if "issue" in body.lower() or "blocking" in body.lower() or "sourcery" in body.lower():
+                            has_review_issues = True
+                            break
+                    for review in pr.get("reviews", []):
+                        state = review.get("state", "")
+                        if state == "CHANGES_REQUESTED":
+                            has_review_issues = True
+                            break
+
+                    # 3. Check if branch needs update / rebase
+                    needs_update = mergeable in ("CONFLICTING", "BEHIND")
+
+                    return {
+                        "has_pr": True,
+                        "pr_number": num,
+                        "status_checks_failing": checks_failing,
+                        "has_review_issues": has_review_issues,
+                        "mergeable": mergeable,
+                        "needs_update": needs_update,
+                        "url": url
+                    }
     except Exception:
         pass
-    return False
+    return default_res
 
 def open_session_pr(session):
     """Looks up and opens the GitHub PR associated with the task/session if created."""
@@ -253,9 +299,21 @@ def draw_menu(stdscr):
                 clean_title = raw_title.lstrip("#").strip().replace("\n", " ")
                 title = clean_title
 
-                has_pr = check_session_has_pr(s)
+                pr_st = check_session_pr_status(s)
+                has_pr = pr_st["has_pr"]
+                pr_failed = pr_st["status_checks_failing"]
+                pr_issues = pr_st["has_review_issues"]
+                pr_conflict = pr_st["needs_update"]
 
-                if ("COMPLETED" in state or "SUCCEEDED" in state or "RESOLVED" in state or "ARCHIVED" in state) and has_pr:
+                if pr_failed or pr_issues or pr_conflict:
+                    color = curses.color_pair(6) | curses.A_BOLD  # Highlighted Red background with Black text
+                    if pr_failed:
+                        display_state = "PR_CHECK_FAIL ❌"
+                    elif pr_conflict:
+                        display_state = "PR_CONFLICT ⚠️"
+                    else:
+                        display_state = "PR_ISSUES ⚠️"
+                elif ("COMPLETED" in state or "SUCCEEDED" in state or "RESOLVED" in state or "ARCHIVED" in state) and has_pr:
                     color = curses.color_pair(2)
                     display_state = "PR_CREATED 🔗"
                 elif "COMPLETED" in state or "SUCCEEDED" in state or "RESOLVED" in state or "ARCHIVED" in state:
