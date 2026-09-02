@@ -23,6 +23,7 @@ mkdir -p "$BIN_DIR" "$DESKTOP_DIR" "$SYSTEMD_USER_DIR"
 chmod +x "$SCRIPT_DIR/jules_manager.py" "$SCRIPT_DIR/jules_listener.py" "$SCRIPT_DIR/jules_tui.py" "$SCRIPT_DIR/jules_hud.py" "$SCRIPT_DIR/jules_scraper.py" "$SCRIPT_DIR/jules_cookie_extractor.py"
 
 ln -sf "$SCRIPT_DIR/jules_manager.py" "$BIN_DIR/jules-manager"
+ln -sf "$SCRIPT_DIR/jules_manager.py" "$BIN_DIR/jules-vanager"
 ln -sf "$SCRIPT_DIR/jules_listener.py" "$BIN_DIR/jules-listener"
 ln -sf "$SCRIPT_DIR/jules_tui.py" "$BIN_DIR/jules-tui"
 ln -sf "$SCRIPT_DIR/jules_hud.py" "$BIN_DIR/jules-hud"
