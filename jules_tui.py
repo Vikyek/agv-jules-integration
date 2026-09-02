@@ -6,6 +6,21 @@ responding to session queries, and configuring listener execution mode.
 """
 
 import curses
+
+def _get_key_with_mouse_wheel(stdscr):
+    k = stdscr.getch()
+    if k == curses.KEY_MOUSE:
+        try:
+            _, mx, my, _, bstate = curses.getmouse()
+            if bstate & getattr(curses, 'BUTTON4_PRESSED', 0):
+                return curses.KEY_UP
+            elif bstate & getattr(curses, 'BUTTON5_PRESSED', 0):
+                return curses.KEY_DOWN
+            curses.ungetmouse(_, mx, my, _, bstate)
+        except Exception:
+            pass
+    return k
+
 import os
 import sys
 import json
@@ -483,20 +498,34 @@ def draw_menu(stdscr):
         stdscr.addstr(3, 1, "ACTIVE SESSIONS:", curses.A_BOLD)
         
         # Calculate available vertical space for sessions list
-        available_height = height - 5 - footer_height - (1 if action_msg else 0)
+        max_y = height - footer_height - (1 if action_msg else 0) - 1
         curr_y = 5
         session_row_map = {}
 
         if not sessions_cache:
             stdscr.addstr(5, 2, "No active sessions found.", curses.color_pair(3))
         else:
-            # Keep selected_idx visible within viewport bounds
             if selected_idx < scroll_top:
                 scroll_top = selected_idx
 
-            max_y_bound = height - footer_height - (1 if action_msg else 0) - 1
+            # Pre-calculate item heights to ensure selected_idx is fully visible on screen
+            while scroll_top < selected_idx:
+                calc_y = 5
+                for idx in range(scroll_top, selected_idx + 1):
+                    s_item = sessions_cache[idx]
+                    t_item = (s_item.get("title") or s_item.get("prompt", "")).replace("\n", " ")
+                    meta_w = 40 if width >= 120 else 30
+                    w_lines = textwrap.wrap(t_item, max(10, width - meta_w)) or [t_item]
+                    calc_y += len(w_lines)
+                if calc_y > max_y:
+                    scroll_top += 1
+                else:
+                    break
 
             for i in range(scroll_top, len(sessions_cache)):
+                if curr_y >= max_y:
+                    break
+
                 s = sessions_cache[i]
                 raw_title = s.get("title", "")
                 if not raw_title or len(raw_title) > 100 or "\n" in raw_title:
@@ -571,18 +600,6 @@ def draw_menu(stdscr):
                 meta_len = len(meta_prefix)
                 title_width = max(10, width - meta_len - 3)
                 wrapped_title = textwrap.wrap(title, title_width) or [title]
-                item_lines_needed = len(wrapped_title)
-
-                # If selected item would overflow screen, scroll down
-                if i == selected_idx and curr_y + item_lines_needed > max_y_bound:
-                    scroll_top += 1
-                    # Restart draw loop with incremented scroll_top
-                    stdscr.erase()
-                    curr_y = 5
-                    break
-
-                if curr_y + item_lines_needed > max_y_bound:
-                    break
 
                 start_y = curr_y
 
@@ -601,6 +618,8 @@ def draw_menu(stdscr):
 
                 # Draw wrapped title lines indented under the title column
                 for extra_line in wrapped_title[1:]:
+                    if curr_y >= 5 + available_height:
+                        break
                     indented_line = f"{' ' * meta_len}{extra_line}"[:width-2]
                     if i == selected_idx:
                         stdscr.attron(curses.color_pair(5) | curses.A_BOLD)
@@ -639,7 +658,7 @@ def draw_menu(stdscr):
 
         stdscr.refresh()
         stdscr.timeout(150)
-        key = stdscr.getch()
+        key = _get_key_with_mouse_wheel(stdscr)
 
         if key == curses.KEY_RESIZE:
             curses.update_lines_cols()
@@ -677,9 +696,9 @@ def draw_menu(stdscr):
         elif key in (ord('q'), ord('Q')):
             # Persistent session history retention: Do NOT kill background service or delete cache on TUI exit
             break
-        elif key == curses.KEY_UP and selected_idx > 0:
+        elif key in (curses.KEY_UP, ord('k')) and selected_idx > 0:
             selected_idx -= 1
-        elif key == curses.KEY_DOWN and selected_idx < len(sessions_cache) - 1:
+        elif key in (curses.KEY_DOWN, ord('j')) and selected_idx < len(sessions_cache) - 1:
             selected_idx += 1
         elif key in (ord('s'), ord('S')):
             action_name = "Stop background listener service?" if svc_active else "Start background listener service?"
@@ -801,7 +820,7 @@ def prompt_confirm(stdscr, question):
         stdscr.attroff(curses.color_pair(1))
 
         stdscr.refresh()
-        ch = stdscr.getch()
+        ch = _get_key_with_mouse_wheel(stdscr)
         if ch in (ord('y'), ord('Y')):
             stdscr.timeout(1000)
             return True
@@ -996,7 +1015,7 @@ def prompt_suggestion_details_panel(stdscr, sug, agy_status=""):
             stdscr.attroff(curses.color_pair(6 if "ERROR" in agy_status or "FAILED" in agy_status else 1) | curses.A_BOLD)
 
         stdscr.refresh()
-        ch = stdscr.getch()
+        ch = _get_key_with_mouse_wheel(stdscr)
 
         if ch == 27:  # ESC
             stdscr.timeout(1000)
@@ -1079,7 +1098,7 @@ def prompt_suggestions_panel(stdscr, preloaded_suggestions=None):
                 stdscr.addstr(msg_y, 2, status_msg[:width-4])
                 stdscr.attroff(curses.color_pair(3) | curses.A_BOLD)
 
-        available_height = height - 3 - sug_footer_height - (1 if status_msg else 0)
+        max_y = height - sug_footer_height - (1 if status_msg else 0) - 1
         curr_y = 2
 
         sug_row_map = {}
@@ -1089,14 +1108,34 @@ def prompt_suggestions_panel(stdscr, preloaded_suggestions=None):
             if selected_idx >= len(suggestions):
                 selected_idx = max(0, len(suggestions) - 1)
 
-            # Adjust viewport scroll_top offset to keep selected_idx visible on screen
             if selected_idx < scroll_top:
                 scroll_top = selected_idx
-            elif selected_idx >= scroll_top + (available_height // 2):
-                scroll_top = max(0, selected_idx - (available_height // 2) + 1)
+
+            # Pre-calculate suggestion item heights (title + wrapped details + status) to keep selected_idx visible
+            while scroll_top < selected_idx:
+                calc_y = 2
+                for idx in range(scroll_top, selected_idx + 1):
+                    sg = suggestions[idx]
+                    t_title = sg.get("title", "")
+                    t_details = sg.get("details", "")
+                    raw_r = sg.get("repo", "paru-wrapper")
+                    r_short = raw_r.split("/")[-1] if "/" in raw_r else raw_r
+
+                    calc_y += 1  # title line
+                    if t_details:
+                        d_lines = textwrap.wrap(f"↳ {t_details}", max(20, width - 8)) or [f"↳ {t_details}"]
+                        calc_y += len(d_lines)
+                    if agy_task_status.get(t_title):
+                        s_info = agy_task_status[t_title]
+                        st_lines = textwrap.wrap(f"⚡ AGY Task Status: [{s_info}]", max(20, width - 8)) or [1]
+                        calc_y += len(st_lines)
+                if calc_y > max_y:
+                    scroll_top += 1
+                else:
+                    break
 
             for i in range(scroll_top, len(suggestions)):
-                if curr_y >= 2 + available_height:
+                if curr_y >= max_y:
                     break
 
                 sug = suggestions[i]
@@ -1172,7 +1211,7 @@ def prompt_suggestions_panel(stdscr, preloaded_suggestions=None):
 
         stdscr.refresh()
         stdscr.timeout(50)
-        ch = stdscr.getch()
+        ch = _get_key_with_mouse_wheel(stdscr)
 
         if ch == curses.KEY_MOUSE:
             try:
@@ -1210,9 +1249,9 @@ def prompt_suggestions_panel(stdscr, preloaded_suggestions=None):
         elif ch == 27:
             stdscr.timeout(1000)
             return "Returned to active sessions."
-        elif ch == curses.KEY_UP and selected_idx > 0:
+        elif ch in (curses.KEY_UP, ord('k')) and selected_idx > 0:
             selected_idx -= 1
-        elif ch == curses.KEY_DOWN and selected_idx < len(suggestions) - 1:
+        elif ch in (curses.KEY_DOWN, ord('j')) and selected_idx < len(suggestions) - 1:
             selected_idx += 1
         elif ch == ord(' '):
             if selected_idx in selected_set:
@@ -1481,7 +1520,7 @@ def prompt_action_history_panel(stdscr, filter_suggestions_only=False):
             stdscr.addstr(4 + idx, 3, l[:width-4])
 
         stdscr.refresh()
-        ch = stdscr.getch()
+        ch = _get_key_with_mouse_wheel(stdscr)
         if ch == 27:  # ESC key
             stdscr.timeout(1000)
             return "Returned."
@@ -1529,7 +1568,7 @@ def prompt_archived_suggestions_panel(stdscr):
             if selected_idx < scroll_top:
                 scroll_top = selected_idx
             elif selected_idx >= scroll_top + available_height:
-                scroll_top = selected_idx - available_height + 1
+                scroll_top = selected_idx - max(1, available_height // 3) + 1
 
             for i in range(scroll_top, len(dismissed_set)):
                 if curr_y >= 2 + available_height:
@@ -1550,14 +1589,14 @@ def prompt_archived_suggestions_panel(stdscr):
                 curr_y += 1
 
         stdscr.refresh()
-        ch = stdscr.getch()
+        ch = _get_key_with_mouse_wheel(stdscr)
 
         if ch == 27:  # ESC key
             stdscr.timeout(1000)
             return "Returned to suggestions panel."
-        elif ch == curses.KEY_UP and selected_idx > 0:
+        elif ch in (curses.KEY_UP, ord('k')) and selected_idx > 0:
             selected_idx -= 1
-        elif ch == curses.KEY_DOWN and selected_idx < len(dismissed_set) - 1:
+        elif ch in (curses.KEY_DOWN, ord('j')) and selected_idx < len(dismissed_set) - 1:
             selected_idx += 1
         elif ch in (ord('r'), ord('R')) and dismissed_set:
             title_to_restore = dismissed_set[selected_idx]
@@ -1630,7 +1669,7 @@ def prompt_archived_panel(stdscr, preloaded_archived=None):
             if selected_idx < scroll_top:
                 scroll_top = selected_idx
             elif selected_idx >= scroll_top + available_height:
-                scroll_top = selected_idx - available_height + 1
+                scroll_top = selected_idx - max(1, available_height // 3) + 1
 
             for i in range(scroll_top, len(archived_sessions)):
                 if curr_y >= 2 + available_height:
@@ -1680,14 +1719,14 @@ def prompt_archived_panel(stdscr, preloaded_archived=None):
                     curr_y += 1
 
         stdscr.refresh()
-        ch = stdscr.getch()
+        ch = _get_key_with_mouse_wheel(stdscr)
 
         if ch == 27:  # ESC key
             stdscr.timeout(1000)
             return "Returned to active sessions."
-        elif ch == curses.KEY_UP and selected_idx > 0:
+        elif ch in (curses.KEY_UP, ord('k')) and selected_idx > 0:
             selected_idx -= 1
-        elif ch == curses.KEY_DOWN and selected_idx < len(archived_sessions) - 1:
+        elif ch in (curses.KEY_DOWN, ord('j')) and selected_idx < len(archived_sessions) - 1:
             selected_idx += 1
         elif ch in (ord('u'), ord('U')) and archived_sessions:
             from jules_manager import unarchive_session
@@ -1864,7 +1903,7 @@ def prompt_reply(stdscr, session_id, local_num, preloaded_data=None):
             stdscr.attroff(curses.color_pair(4))
 
         stdscr.refresh()
-        ch = stdscr.getch()
+        ch = _get_key_with_mouse_wheel(stdscr)
 
         if ch == curses.KEY_RESIZE:
             curses.update_lines_cols()
