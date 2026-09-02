@@ -1,14 +1,14 @@
-# 🤖 agy-vules-integration
+# 🤖 jules-manager
 
-Standalone Google Jules API Manager, Listener Daemon, TUI, and Conky HUD Display for Antigravity (AGY).
+Standalone Google Jules API Manager, Listener Daemon, Interactive TUI, and Conky HUD Widget — with optional Antigravity (AGY) integration.
 
 ## 🚀 Features
 
 - **Jules API Manager (`jules-manager`)**: Command-line interface for session creation, listing sources/sessions, retrieving activities, and sending messages.
 - **Listener Daemon (`jules-listener`)**: Background service monitoring active sessions, verifying PRs/syntax/tests, auto-merging clean PRs, deleting merged branches, and auto-archiving completed sessions.
-- **Interactive TUI (`jules-tui`)**: Terminal interface built with Python curses for viewing session status, prompt replies, and live mode switching.
+- **Interactive TUI (`jules-tui`)**: Terminal UI built with Python curses for viewing session status, prompt replies, and live mode switching.
 - **Conky HUD Widget (`jules-hud`)**: Lightweight ANSI/text HUD widget formatting real-time session metrics for terminal overlays or status bars (`vlfstatus`).
-- **AGY Plugin (`jules-plugin`)**: Native integration with Antigravity (AGY) agents.
+- **Optional AGY Integration (`jules-plugin`)**: Integration plugin for Antigravity (AGY) agents.
 
 ---
 
@@ -18,6 +18,7 @@ Run the automated installer:
 ```bash
 ./install.sh
 ```
+*(Optionally pass `--with-agy` if installing on a custom environment without `~/.gemini` directory).*
 
 ### Manual Installation
 1. Make Python scripts executable:

@@ -113,7 +113,7 @@ def fetch_sourcery_pr_suggestions():
 
     # Fallback to local git repository commit history for Sourcery refactor logs if API is rate limited or timed out
     if not suggestions:
-        for clean_repo in ["paru-wrapper", "agv-jules-integration"]:
+        for clean_repo in ["paru-wrapper", "jules-manager"]:
             repo_dir = os.path.expanduser(f"~/Projects/{clean_repo}")
             if os.path.exists(os.path.join(repo_dir, ".git")):
                 try:
@@ -168,10 +168,9 @@ def fetch_jules_suggestions(raw_html_snippet=None, filter_dismissed=True):
         # Extract all suggestion-title span elements
         titles = re.findall(r'<span[^>]*class=["\'][^"\']*suggestion-title[^"\']*["\'][^>]*>(.*?)</span>', html_content, re.DOTALL | re.IGNORECASE)
         for t in titles:
-            clean_title = re.sub(r'<[^>]+>', ' ', t).strip()
-            if clean_title:
-                # Infer repository or type based on title keywords
-                repo = "Vikyek/paru-wrapper" if any(k in clean_title.lower() for k in ["run_cmd", "update_mkvpkg", "vercmp", "pacman", "aur", "curl"]) else "Vikyek/agv-jules-integration"
+            clean_title = re.sub(r'<[^>]+>', '', t).strip()
+            if clean_title and clean_title not in dismissed_titles:
+                repo = "Vikyek/paru-wrapper" if any(k in clean_title.lower() for k in ["run_cmd", "update_mkvpkg", "vercmp", "pacman", "aur", "curl"]) else "Vikyek/jules-manager"
                 suggestions.append({
                     "title": clean_title,
                     "details": f"Proactive recommendation: {clean_title}",
