@@ -788,6 +788,7 @@ def prompt_suggestions_panel(stdscr):
     from jules_scraper import fetch_jules_suggestions
     stdscr.timeout(-1)
     selected_idx = 0
+    selected_set = set()
     status_msg = ""
     agy_task_status = {}
     spinner_frames = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
@@ -807,16 +808,15 @@ def prompt_suggestions_panel(stdscr):
         # Do not filter out dismissed suggestions so completed items stay visible until explicit refresh [r]
         suggestions = fetch_jules_suggestions(filter_dismissed=False)
 
-        # Multi-line footer keybindings bar wrapping calculation (using non-breaking spaces \u00A0 between keybind badge and label)
-        long_sug_tips = f"Keybindings: [g]\u00A0start\u00A0AGY | [a]\u00A0start\u00A0all | [c]\u00A0check\u00A0done | [j]\u00A0start\u00A0Jules | [r]\u00A0refresh | [x]\u00A0dismiss | [ESC]\u00A0return"
+        long_sug_tips = f"Keybindings: [a] select all | [space] toggle | [g] start AGY ({len(selected_set)}) | [c] check | [j] Jules | [r] refresh | [x] dismiss | [ESC] return"
         if len(long_sug_tips) <= width - 4:
             raw_sug_tips = long_sug_tips
         else:
-            nokey_tips = f"[g]\u00A0start\u00A0AGY | [a]\u00A0start\u00A0all | [c]\u00A0check\u00A0done | [j]\u00A0start\u00A0Jules | [r]\u00A0refresh | [x]\u00A0dismiss | [ESC]\u00A0return"
+            nokey_tips = f"[a]\u00A0select\u00A0all | [space]\u00A0toggle | [g]\u00A0start\u00A0({len(selected_set)}) | [c]\u00A0check | [j]\u00A0Jules | [r]\u00A0refresh | [x]\u00A0dismiss | [ESC]\u00A0return"
             if len(nokey_tips) <= width - 4:
                 raw_sug_tips = nokey_tips
             else:
-                raw_sug_tips = f"[g]\u00A0agy | [a]\u00A0all | [c]\u00A0check | [j]\u00A0jules | [r]\u00A0refresh | [x]\u00A0dismiss | [ESC]\u00A0return"
+                raw_sug_tips = f"[a]\u00A0all | [spc]\u00A0sel | [g]\u00A0agy\u00A0({len(selected_set)}) | [c]\u00A0chk | [j]\u00A0jules | [r]\u00A0ref | [x]\u00A0dis | [ESC]\u00A0ret"
 
         raw_sug_lines = textwrap.wrap(raw_sug_tips, max(20, width - 4)) or [raw_sug_tips]
         sug_footer_lines = [l.strip().lstrip("|").rstrip("|").strip() for l in raw_sug_lines]
@@ -858,14 +858,20 @@ def prompt_suggestions_panel(stdscr):
                 repo = sug.get("repo", "Vikyek/paru-wrapper")
 
                 start_y = curr_y
-                prefix = ">" if i == selected_idx else " "
-                line1 = f"{prefix} [#{i+1}] [{repo}] {title}"[:width-2]
+                is_selected = (i in selected_set)
+                chk = "[x]" if is_selected else "[ ]"
+                cursor_mark = ">" if i == selected_idx else " "
+                line1 = f"{cursor_mark} {chk} [#{i+1}] [{repo}] {title}"[:width-2]
 
                 if 0 <= curr_y < height - 2:
                     if i == selected_idx:
                         stdscr.attron(curses.color_pair(5) | curses.A_BOLD)
                         stdscr.addstr(curr_y, 1, line1)
                         stdscr.attroff(curses.color_pair(5) | curses.A_BOLD)
+                    elif is_selected:
+                        stdscr.attron(curses.color_pair(2) | curses.A_BOLD)
+                        stdscr.addstr(curr_y, 1, line1)
+                        stdscr.attroff(curses.color_pair(2) | curses.A_BOLD)
                     else:
                         stdscr.attron(curses.color_pair(1))
                         stdscr.addstr(curr_y, 1, line1)
@@ -873,7 +879,7 @@ def prompt_suggestions_panel(stdscr):
 
                 curr_y += 1
                 if details and 0 <= curr_y < height - 2:
-                    detail_line = f"     ↳ {details}"[:width-4]
+                    detail_line = f"       ↳ {details}"[:width-4]
                     stdscr.attron(curses.color_pair(7 if i != selected_idx else 5))
                     stdscr.addstr(curr_y, 1, detail_line)
                     stdscr.attroff(curses.color_pair(7 if i != selected_idx else 5))
@@ -893,13 +899,13 @@ def prompt_suggestions_panel(stdscr):
                     else:
                         status_info = raw_info
 
-                    status_line = f"     ⚡ AGY Task Status: [{status_info}]"[:width-4]
+                    status_line = f"       ⚡ AGY Task Status: [{status_info}]"[:width-4]
                     stdscr.attron(curses.color_pair(3 if "ERROR" in status_info or "FAILED" in status_info else (2 if "DONE" in status_info or "COMPLETED" in status_info else 1)))
                     stdscr.addstr(curr_y, 1, status_line)
                     stdscr.attroff(curses.color_pair(3 if "ERROR" in status_info or "FAILED" in status_info else (2 if "DONE" in status_info or "COMPLETED" in status_info else 1)))
                     curr_y += 1
                 elif title.strip() in dismissed_set and 0 <= curr_y < height - 2:
-                    status_line = "     ⚡ AGY Task Status: [COMPLETED ✅]"[:width-4]
+                    status_line = "       ⚡ AGY Task Status: [COMPLETED ✅]"[:width-4]
                     stdscr.attron(curses.color_pair(2))
                     stdscr.addstr(curr_y, 1, status_line)
                     stdscr.attroff(curses.color_pair(2))
@@ -925,6 +931,24 @@ def prompt_suggestions_panel(stdscr):
                 else:
                     for idx_item, (sy, ey) in sug_row_map.items():
                         if sy <= my <= ey:
+                            # Shift click (range select)
+                            if bstate & getattr(curses, "BUTTON_SHIFT", 0):
+                                start_i = min(selected_idx, idx_item)
+                                end_i = max(selected_idx, idx_item)
+                                for r_i in range(start_i, end_i + 1):
+                                    selected_set.add(r_i)
+                            # Ctrl click or standard click toggle
+                            elif bstate & getattr(curses, "BUTTON_CTRL", 0):
+                                if idx_item in selected_set:
+                                    selected_set.remove(idx_item)
+                                else:
+                                    selected_set.add(idx_item)
+                            else:
+                                selected_idx = idx_item
+                                if idx_item in selected_set:
+                                    selected_set.remove(idx_item)
+                                else:
+                                    selected_set.add(idx_item)
                             selected_idx = idx_item
                             break
             except Exception:
@@ -936,53 +960,78 @@ def prompt_suggestions_panel(stdscr):
             selected_idx -= 1
         elif ch == curses.KEY_DOWN and selected_idx < len(suggestions) - 1:
             selected_idx += 1
-        elif ch in (ord('g'), ord('G'), curses.KEY_ENTER, 10, 13) and suggestions:
-            curr_sug = suggestions[selected_idx]
-            task_title = curr_sug.get("title", "")
-            task_details = curr_sug.get("details", "")
-            repo_name = curr_sug.get("repo", "Vikyek/paru-wrapper")
-            
+        elif ch == ord(' '):
+            if selected_idx in selected_set:
+                selected_set.remove(selected_idx)
+            else:
+                selected_set.add(selected_idx)
+        elif ch in (ord('a'), ord('A')) and suggestions:
             from jules_scraper import load_dismissed_suggestions
             dismissed_set = load_dismissed_suggestions()
-            if task_title.strip() in dismissed_set or agy_task_status.get(task_title) in ("COMPLETED ✅", "VERIFIED DONE ✅"):
-                status_msg = f"⚠️ Suggestion #{selected_idx + 1} is already completed!"
-                continue
-            if agy_task_status.get(task_title) in ("RUNNING", "VERIFYING"):
-                status_msg = f"⚠️ Suggestion #{selected_idx + 1} is already running!"
+            active_indices = [
+                i for i, s in enumerate(suggestions)
+                if s.get("title", "").strip() not in dismissed_set
+                and agy_task_status.get(s.get("title", "")) not in ("COMPLETED ✅", "VERIFIED DONE ✅")
+            ]
+            if len(selected_set) == len(active_indices):
+                selected_set.clear()
+                status_msg = "Deselected all suggestions."
+            else:
+                selected_set = set(active_indices)
+                status_msg = f"✅ Selected all ({len(selected_set)}) active suggestions."
+        elif ch in (ord('g'), ord('G'), curses.KEY_ENTER, 10, 13) and suggestions:
+            from jules_scraper import load_dismissed_suggestions
+            dismissed_set = load_dismissed_suggestions()
+
+            target_indices = list(selected_set) if selected_set else [selected_idx]
+            target_sugs = [suggestions[i] for i in target_indices if i < len(suggestions)]
+            valid_sugs = [
+                s for s in target_sugs
+                if s.get("title", "").strip() not in dismissed_set
+                and agy_task_status.get(s.get("title", "")) not in ("COMPLETED ✅", "VERIFIED DONE ✅", "RUNNING", "VERIFYING")
+            ]
+
+            if not valid_sugs:
+                status_msg = "⚠️ Selected suggestion(s) are already completed or running!"
                 continue
 
             cfg = load_config()
             agy_mode = cfg.get("agy_mode", "plan")
             skip_perms = cfg.get("agy_skip_permissions", True)
-            
-            safe_title = task_title.replace("'", "").replace('"', "")
-            safe_details = task_details.replace("'", "").replace('"', "")
 
-            prompt_prefix = f"/{agy_mode} " if agy_mode == "plan" else ""
-            prompt_str = f"{prompt_prefix}{safe_title}: {safe_details} in {repo_name}"
-            
-            flags = f"--mode {agy_mode}"
-            if skip_perms:
-                flags += " --dangerously-skip-permissions"
+            for sug in valid_sugs:
+                task_title = sug.get("title", "")
+                task_details = sug.get("details", "")
+                repo_name = sug.get("repo", "Vikyek/paru-wrapper")
 
-            def run_agy_task(title, prompt, flg, r_name):
-                agy_task_status[title] = "RUNNING"
-                try:
-                    import shlex
-                    cmd_args = ["/usr/sbin/agy"] + shlex.split(flg) + ["-p", prompt]
-                    res = subprocess.run(cmd_args, capture_output=True, text=True)
-                    if res.returncode == 0:
-                        from jules_scraper import dismiss_suggestion
-                        dismiss_suggestion(title)
-                        agy_task_status[title] = "COMPLETED ✅"
-                        log_action_event(title, r_name, "main", "AGY_SUGGESTION_RUN")
-                    else:
-                        agy_task_status[title] = f"FAILED ✖ (code {res.returncode})"
-                except Exception as e:
-                    agy_task_status[title] = f"ERROR 🚨 ({e})"
+                safe_title = task_title.replace("'", "").replace('"', "")
+                safe_details = task_details.replace("'", "").replace('"', "")
+                prompt_prefix = f"/{agy_mode} " if agy_mode == "plan" else ""
+                prompt_str = f"{prompt_prefix}{safe_title}: {safe_details} in {repo_name}"
+                flags = f"--mode {agy_mode}"
+                if skip_perms:
+                    flags += " --dangerously-skip-permissions"
 
-            threading.Thread(target=run_agy_task, args=(task_title, prompt_str, flags, repo_name), daemon=True).start()
-            status_msg = f"🚀 Started non-blocking AGY ({agy_mode}) task for suggestion #{selected_idx + 1}"
+                def run_agy_task(title, prompt, flg, r_name):
+                    agy_task_status[title] = "RUNNING"
+                    try:
+                        import shlex
+                        cmd_args = ["/usr/sbin/agy"] + shlex.split(flg) + ["-p", prompt]
+                        res = subprocess.run(cmd_args, capture_output=True, text=True)
+                        if res.returncode == 0:
+                            from jules_scraper import dismiss_suggestion
+                            dismiss_suggestion(title)
+                            agy_task_status[title] = "COMPLETED ✅"
+                            log_action_event(title, r_name, "main", "AGY_SUGGESTION_RUN")
+                        else:
+                            agy_task_status[title] = f"FAILED ✖ (code {res.returncode})"
+                    except Exception as e:
+                        agy_task_status[title] = f"ERROR 🚨 ({e})"
+
+                threading.Thread(target=run_agy_task, args=(task_title, prompt_str, flags, repo_name), daemon=True).start()
+
+            status_msg = f"🚀 Started non-blocking AGY ({agy_mode}) for {len(valid_sugs)} selected suggestion(s)!"
+            selected_set.clear()
         elif ch in (ord('c'), ord('C')) and suggestions:
             curr_sug = suggestions[selected_idx]
             task_title = curr_sug.get("title", "")
