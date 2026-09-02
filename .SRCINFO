@@ -1,0 +1,17 @@
+pkgbase = jules-vanager
+	pkgdesc = Google Jules API Manager, Listener Daemon, Interactive TUI, and Conky HUD
+	pkgver = 1.0.0
+	pkgrel = 1
+	url = https://github.com/Vikyek/jules-vanager
+	arch = any
+	license = GPL-3.0-only
+	depends = python
+	depends = python-requests
+	depends = gh
+	depends = systemd
+	optdepends = xclip: Clipboard support for X11
+	optdepends = wl-clipboard: Clipboard support for Wayland
+	source = jules-vanager-1.0.0.tar.gz::https://github.com/Vikyek/jules-vanager/archive/refs/tags/v1.0.0.tar.gz
+	sha256sums = SKIP
+
+pkgname = jules-vanager
