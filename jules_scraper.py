@@ -113,28 +113,28 @@ def fetch_sourcery_pr_suggestions():
 
     # Fallback to local git repository commit history for Sourcery refactor logs if API is rate limited
     if not suggestions:
-        clean_repo = "paru-wrapper"
-        repo_dir = os.path.expanduser(f"~/Projects/{clean_repo}")
-        if os.path.exists(os.path.join(repo_dir, ".git")):
-            try:
-                g_res = subprocess.run(["git", "log", "-n", "30", "--oneline"], cwd=repo_dir, capture_output=True, text=True)
-                if g_res.returncode == 0:
-                    for line in g_res.stdout.splitlines():
-                        if any(k in line.lower() for k in ["sourcery", "refactor", "health", "exception", "security", "perf"]):
-                            parts = line.strip().split(" ", 1)
-                            if len(parts) == 2:
-                                c_hash, c_msg = parts
-                                stitle = f"Sourcery Code Health ({c_hash}): {c_msg[:60]}"
-                                if stitle not in seen_titles:
-                                    seen_titles.add(stitle)
-                                    suggestions.append({
-                                        "title": stitle,
-                                        "details": f"Sourcery code health recommendation: {c_msg}",
-                                        "repo": f"Vikyek/{clean_repo}",
-                                        "source": "git_commit_log"
-                                    })
-            except Exception:
-                pass
+        for clean_repo in ["paru-wrapper", "agv-jules-integration"]:
+            repo_dir = os.path.expanduser(f"~/Projects/{clean_repo}")
+            if os.path.exists(os.path.join(repo_dir, ".git")):
+                try:
+                    g_res = subprocess.run(["git", "log", "-n", "50", "--oneline"], cwd=repo_dir, capture_output=True, text=True)
+                    if g_res.returncode == 0:
+                        for line in g_res.stdout.splitlines():
+                            if any(k in line.lower() for k in ["sourcery", "refactor", "health", "exception", "security", "perf", "merge pull request"]):
+                                parts = line.strip().split(" ", 1)
+                                if len(parts) == 2:
+                                    c_hash, c_msg = parts
+                                    stitle = f"Sourcery PR/Health ({c_hash}): {c_msg[:60]}"
+                                    if stitle not in seen_titles:
+                                        seen_titles.add(stitle)
+                                        suggestions.append({
+                                            "title": stitle,
+                                            "details": f"Sourcery PR & code health recommendation: {c_msg}",
+                                            "repo": f"Vikyek/{clean_repo}",
+                                            "source": "git_commit_log"
+                                        })
+                except Exception:
+                    pass
 
     return suggestions
 
