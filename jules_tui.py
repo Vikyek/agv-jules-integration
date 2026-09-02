@@ -884,16 +884,146 @@ def prompt_suggestions_panel(stdscr):
 
         # Do not filter out dismissed suggestions so completed items stay visible until explicit refresh [r]
         suggestions = fetch_jules_suggestions(filter_dismissed=False)
+def copy_to_clipboard(text):
+    """Helper to copy text to system clipboard via xclip, xsel, or wl-copy."""
+    try:
+        p = subprocess.Popen(["xclip", "-selection", "clipboard"], stdin=subprocess.PIPE)
+        p.communicate(input=text.encode("utf-8"))
+        if p.returncode == 0:
+            return True
+    except Exception:
+        pass
+    try:
+        p = subprocess.Popen(["xsel", "--clipboard", "--input"], stdin=subprocess.PIPE)
+        p.communicate(input=text.encode("utf-8"))
+        if p.returncode == 0:
+            return True
+    except Exception:
+        pass
+    try:
+        p = subprocess.Popen(["wl-copy"], stdin=subprocess.PIPE)
+        p.communicate(input=text.encode("utf-8"))
+        if p.returncode == 0:
+            return True
+    except Exception:
+        pass
+    return False
 
-        long_sug_tips = f"Keybindings: [a] select all | [space] toggle | [g] start AGY ({len(selected_set)}) | [c] check | [j] Jules | [h] history | [v] archived | [r] refresh | [x] dismiss | [ESC] return"
+def prompt_suggestion_details_panel(stdscr, sug, agy_status=""):
+    """
+    Displays an interactive full-screen Details Inspector for a recommendation.
+    Allows viewing full recommendation text, exact AGY prompt payload, and copying
+    details or error messages directly to system clipboard.
+    """
+    stdscr.timeout(-1)
+    status_msg = ""
+    title = sug.get("title", "")
+    details = sug.get("details", "")
+    repo = sug.get("repo", "Vikyek/paru-wrapper")
+
+    cfg = load_config()
+    agy_mode = cfg.get("agy_mode", "plan")
+    safe_title = title.replace("'", "").replace('"', "")
+    safe_details = details.replace("'", "").replace('"', "")
+    prompt_prefix = f"/{agy_mode} " if agy_mode == "plan" else ""
+    prompt_str = f"{prompt_prefix}{safe_title}: {safe_details}"
+
+    while True:
+        height, width = stdscr.getmaxyx()
+        stdscr.clear()
+
+        header = " 🔍 RECOMMENDATION DETAILS INSPECTOR "
+        stdscr.attron(curses.color_pair(5) | curses.A_BOLD)
+        stdscr.addstr(0, 0, header[:width].center(width))
+        stdscr.attroff(curses.color_pair(5) | curses.A_BOLD)
+
+        footer_tips = "Keybindings: [c] copy details | [p] copy prompt | [e] copy error/status | [ESC] return"
+        stdscr.attron(curses.color_pair(1))
+        stdscr.addstr(height - 1, 0, footer_tips.center(width)[:width-1])
+        stdscr.attroff(curses.color_pair(1))
+
+        if status_msg:
+            stdscr.attron(curses.color_pair(3) | curses.A_BOLD)
+            stdscr.addstr(height - 2, 2, status_msg[:width-4])
+            stdscr.attroff(curses.color_pair(3) | curses.A_BOLD)
+
+        curr_y = 2
+        stdscr.attron(curses.color_pair(1) | curses.A_BOLD)
+        stdscr.addstr(curr_y, 2, f"📌 Title: {title}"[:width-4])
+        stdscr.attroff(curses.color_pair(1) | curses.A_BOLD)
+        curr_y += 1
+
+        stdscr.attron(curses.color_pair(1))
+        stdscr.addstr(curr_y, 2, f"📁 Target Repository: {repo}"[:width-4])
+        stdscr.attroff(curses.color_pair(1))
+        curr_y += 2
+
+        stdscr.attron(curses.color_pair(3) | curses.A_BOLD)
+        stdscr.addstr(curr_y, 2, "📝 Description & Details:")
+        stdscr.attroff(curses.color_pair(3) | curses.A_BOLD)
+        curr_y += 1
+
+        wrapped_details = textwrap.wrap(details, max(20, width - 6)) or [details]
+        for d_line in wrapped_details:
+            if curr_y < height - 5:
+                stdscr.attron(curses.color_pair(3))
+                stdscr.addstr(curr_y, 4, d_line[:width-6])
+                stdscr.attroff(curses.color_pair(3))
+                curr_y += 1
+
+        curr_y += 1
+        stdscr.attron(curses.color_pair(2) | curses.A_BOLD)
+        stdscr.addstr(curr_y, 2, "⚡ AGY Execution Prompt:")
+        stdscr.attroff(curses.color_pair(2) | curses.A_BOLD)
+        curr_y += 1
+
+        wrapped_prompt = textwrap.wrap(prompt_str, max(20, width - 6)) or [prompt_str]
+        for p_line in wrapped_prompt:
+            if curr_y < height - 5:
+                stdscr.attron(curses.color_pair(2))
+                stdscr.addstr(curr_y, 4, p_line[:width-6])
+                stdscr.attroff(curses.color_pair(2))
+                curr_y += 1
+
+        if agy_status:
+            curr_y += 1
+            stdscr.attron(curses.color_pair(6 if "ERROR" in agy_status or "FAILED" in agy_status else 1) | curses.A_BOLD)
+            stdscr.addstr(curr_y, 2, f"🚨 Current Status / Error: {agy_status}"[:width-4])
+            stdscr.attroff(curses.color_pair(6 if "ERROR" in agy_status or "FAILED" in agy_status else 1) | curses.A_BOLD)
+
+        stdscr.refresh()
+        ch = stdscr.getch()
+
+        if ch == 27:  # ESC
+            stdscr.timeout(1000)
+            return "Returned to suggestions panel."
+        elif ch in (ord('c'), ord('C')):
+            if copy_to_clipboard(f"{title}\n{details}"):
+                status_msg = "📋 Copied recommendation title & description to clipboard!"
+            else:
+                status_msg = "⚠️ Clipboard tool (xclip/xsel/wl-copy) failed."
+        elif ch in (ord('p'), ord('P')):
+            if copy_to_clipboard(prompt_str):
+                status_msg = "📋 Copied AGY execution prompt payload to clipboard!"
+            else:
+                status_msg = "⚠️ Clipboard tool (xclip/xsel/wl-copy) failed."
+        elif ch in (ord('e'), ord('E')):
+            copy_text = agy_status or "No status/error recorded."
+            if copy_to_clipboard(copy_text):
+                status_msg = "📋 Copied error message / status to clipboard!"
+            else:
+                status_msg = "⚠️ Clipboard tool (xclip/xsel/wl-copy) failed."
+
+        # Multi-line footer keybindings bar wrapping calculation (using non-breaking spaces \u00A0 between keybind badge and label)
+        long_sug_tips = f"Keybindings: [a] select all | [space] toggle | [i] inspect details | [g] start AGY ({len(selected_set)}) | [c] check | [j] Jules | [h] history | [v] archived | [r] refresh | [x] dismiss | [ESC] return"
         if len(long_sug_tips) <= width - 4:
             raw_sug_tips = long_sug_tips
         else:
-            nokey_tips = f"[a]\u00A0select\u00A0all | [space]\u00A0toggle | [g]\u00A0start\u00A0({len(selected_set)}) | [c]\u00A0check | [j]\u00A0Jules | [h]\u00A0history | [v]\u00A0archived | [r]\u00A0refresh | [x]\u00A0dismiss | [ESC]\u00A0return"
+            nokey_tips = f"[a]\u00A0select\u00A0all | [space]\u00A0toggle | [i]\u00A0inspect | [g]\u00A0start\u00A0({len(selected_set)}) | [c]\u00A0check | [j]\u00A0Jules | [h]\u00A0history | [v]\u00A0archived | [r]\u00A0refresh | [x]\u00A0dismiss | [ESC]\u00A0return"
             if len(nokey_tips) <= width - 4:
                 raw_sug_tips = nokey_tips
             else:
-                raw_sug_tips = f"[a]\u00A0all | [spc]\u00A0sel | [g]\u00A0agy\u00A0({len(selected_set)}) | [c]\u00A0chk | [j]\u00A0jules | [h]\u00A0hist | [v]\u00A0arch | [r]\u00A0ref | [x]\u00A0dis | [ESC]\u00A0ret"
+                raw_sug_tips = f"[a]\u00A0all | [spc]\u00A0sel | [i]\u00A0det | [g]\u00A0agy\u00A0({len(selected_set)}) | [c]\u00A0chk | [j]\u00A0jules | [h]\u00A0hist | [v]\u00A0arch | [r]\u00A0ref | [x]\u00A0dis | [ESC]\u00A0ret"
 
         raw_sug_lines = textwrap.wrap(raw_sug_tips, max(20, width - 4)) or [raw_sug_tips]
         sug_footer_lines = [l.strip().lstrip("|").rstrip("|").strip() for l in raw_sug_lines]
@@ -1051,6 +1181,12 @@ def prompt_suggestions_panel(stdscr):
                 selected_set.remove(selected_idx)
             else:
                 selected_set.add(selected_idx)
+        elif ch in (ord('i'), ord('I')) and suggestions:
+            curr_sug = suggestions[selected_idx]
+            task_title = curr_sug.get("title", "")
+            curr_status = agy_task_status.get(task_title, "")
+            prompt_suggestion_details_panel(stdscr, curr_sug, agy_status=curr_status)
+            status_msg = f"Returned from details inspector for suggestion #{selected_idx + 1}"
         elif ch in (ord('a'), ord('A')) and suggestions:
             from jules_scraper import load_dismissed_suggestions
             dismissed_set = load_dismissed_suggestions()
