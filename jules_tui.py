@@ -445,11 +445,17 @@ def draw_menu(stdscr):
         if now - last_fetch > 10 or not sessions_cache:
             bg_fetch()
 
-        # Multi-line footer keybindings bar wrapping calculation (using non-breaking spaces \\u00A0 between keybind badge and label)
-        if width < 80:
-            raw_tips = f"[s]\u00A0{'stop' if svc_active else 'start'} | [u]\u00A0unstuck | [g]\u00A0suggestions | [o]\u00A0agy-mode | [d]\u00A0perms | [b]\u00A0auto | [p]\u00A0open\u00A0PR | [w]\u00A0Jules\u00A0web\u00A0UI | [h]\u00A0history | [v]\u00A0archived | [q]\u00A0quit"
+        # Multi-line footer keybindings bar wrapping calculation (using non-breaking spaces \u00A0 between keybind badge and label)
+        long_tips = f"Keybindings: [s]\u00A0{'stop' if svc_active else 'start'}\u00A0service | [u]\u00A0unstuck\u00A0session | [g]\u00A0suggestions | [o]\u00A0AGY\u00A0mode | [d]\u00A0AGY\u00A0perms | [b]\u00A0autostart | [p]\u00A0open\u00A0PR | [w]\u00A0Jules\u00A0web\u00A0UI | [h]\u00A0history\u00A0log | [v]\u00A0archived\u00A0collection | [q]\u00A0quit"
+        if len(long_tips) <= width - 4:
+            raw_tips = long_tips
         else:
-            raw_tips = f"Keybindings: [s]\u00A0{'stop' if svc_active else 'start'}\u00A0service | [u]\u00A0unstuck\u00A0session | [g]\u00A0suggestions | [o]\u00A0AGY\u00A0mode | [d]\u00A0AGY\u00A0perms | [b]\u00A0autostart | [p]\u00A0open\u00A0PR | [w]\u00A0Jules\u00A0web\u00A0UI | [h]\u00A0history\u00A0log | [v]\u00A0archived\u00A0collection | [q]\u00A0quit"
+            # Strip "Keybindings: " prefix before shortening labels or wrapping lines
+            nokey_tips = f"[s]\u00A0{'stop' if svc_active else 'start'}\u00A0service | [u]\u00A0unstuck\u00A0session | [g]\u00A0suggestions | [o]\u00A0AGY\u00A0mode | [d]\u00A0AGY\u00A0perms | [b]\u00A0autostart | [p]\u00A0open\u00A0PR | [w]\u00A0Jules\u00A0web\u00A0UI | [h]\u00A0history\u00A0log | [v]\u00A0archived\u00A0collection | [q]\u00A0quit"
+            if len(nokey_tips) <= width - 4:
+                raw_tips = nokey_tips
+            else:
+                raw_tips = f"[s]\u00A0{'stop' if svc_active else 'start'} | [u]\u00A0unstuck | [g]\u00A0suggestions | [o]\u00A0agy-mode | [d]\u00A0perms | [b]\u00A0auto | [p]\u00A0open\u00A0PR | [w]\u00A0Jules\u00A0web\u00A0UI | [h]\u00A0history | [v]\u00A0archived | [q]\u00A0quit"
 
         raw_footer_lines = textwrap.wrap(raw_tips, max(20, width - 4)) or [raw_tips]
         footer_lines = [l.strip().lstrip("|").rstrip("|").strip() for l in raw_footer_lines]
@@ -795,7 +801,11 @@ def prompt_suggestions_panel(stdscr):
 
         suggestions = fetch_jules_suggestions()
 
-        footer_tips = "Keybindings: [g] start AGY | [c] check if done | [j] start Jules | [r] refresh | [x] dismiss | [ESC] return"
+        long_sug_tips = "Keybindings: [g] start AGY | [c] check if done | [j] start Jules | [r] refresh | [x] dismiss | [ESC] return"
+        if len(long_sug_tips) <= width - 2:
+            footer_tips = long_sug_tips
+        else:
+            footer_tips = "[g] start AGY | [c] check if done | [j] start Jules | [r] refresh | [x] dismiss | [ESC] return"
         stdscr.attron(curses.color_pair(1))
         stdscr.addstr(height - 1, 0, footer_tips.center(width)[:width-1])
         stdscr.attroff(curses.color_pair(1))
