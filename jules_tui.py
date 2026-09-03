@@ -616,23 +616,12 @@ def draw_menu(stdscr):
             stdscr.addstr(5, 2, "No active sessions found.", curses.color_pair(3))
         else:
             selected_idx = max(0, min(selected_idx, len(local_sessions) - 1))
-            scroll_top = max(0, min(scroll_top, len(local_sessions) - 1))
+            available_rows = max(1, (max_y - 5) // 2)
             if selected_idx < scroll_top:
                 scroll_top = selected_idx
-
-            # Pre-calculate item heights to ensure selected_idx is fully visible on screen
-            while scroll_top < selected_idx:
-                calc_y = 5
-                for idx in range(scroll_top, selected_idx + 1):
-                    s_item = local_sessions[idx]
-                    t_item = (s_item.get("title") or s_item.get("prompt", "")).replace("\n", " ")
-                    meta_w = 40 if width >= 120 else 30
-                    w_lines = textwrap.wrap(t_item, max(10, width - meta_w)) or [t_item]
-                    calc_y += len(w_lines)
-                if calc_y > max_y:
-                    scroll_top += 1
-                else:
-                    break
+            elif selected_idx >= scroll_top + available_rows:
+                scroll_top = max(0, selected_idx - available_rows + 1)
+            scroll_top = max(0, min(scroll_top, len(local_sessions) - 1))
 
             for i in range(scroll_top, len(local_sessions)):
                 if curr_y >= max_y:
