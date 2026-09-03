@@ -621,7 +621,7 @@ def draw_menu(stdscr):
                 scroll_top = selected_idx
             elif selected_idx >= scroll_top + available_rows:
                 scroll_top = max(0, selected_idx - available_rows + 1)
-            scroll_top = max(0, min(scroll_top, len(local_sessions) - 1))
+            scroll_top = max(0, min(scroll_top, selected_idx))
 
             for i in range(scroll_top, len(local_sessions)):
                 if curr_y >= max_y:
@@ -1298,31 +1298,12 @@ def prompt_suggestions_panel(stdscr, preloaded_suggestions=None):
             if selected_idx >= len(suggestions):
                 selected_idx = max(0, len(suggestions) - 1)
 
+            available_rows = max(1, (max_y - 2) // 3)
             if selected_idx < scroll_top:
                 scroll_top = selected_idx
-
-            # Pre-calculate suggestion item heights (title + wrapped details + status) to keep selected_idx visible
-            while scroll_top < selected_idx:
-                calc_y = 2
-                for idx in range(scroll_top, selected_idx + 1):
-                    sg = suggestions[idx]
-                    t_title = sg.get("title", "")
-                    t_details = sg.get("details", "")
-                    raw_r = sg.get("repo", "paru-wrapper")
-                    r_short = raw_r.split("/")[-1] if "/" in raw_r else raw_r
-
-                    calc_y += 1  # title line
-                    if t_details:
-                        d_lines = textwrap.wrap(f"↳ {t_details}", max(20, width - 8)) or [f"↳ {t_details}"]
-                        calc_y += len(d_lines)
-                    if agy_task_status.get(t_title):
-                        s_info = agy_task_status[t_title]
-                        st_lines = textwrap.wrap(f"⚡ AGY Task Status: [{s_info}]", max(20, width - 8)) or [1]
-                        calc_y += len(st_lines)
-                if calc_y > max_y:
-                    scroll_top += 1
-                else:
-                    break
+            elif selected_idx >= scroll_top + available_rows:
+                scroll_top = max(0, selected_idx - available_rows + 1)
+            scroll_top = max(0, min(scroll_top, len(suggestions) - 1))
 
             for i in range(scroll_top, len(suggestions)):
                 if curr_y >= max_y:
