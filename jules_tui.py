@@ -373,6 +373,7 @@ def draw_menu(stdscr):
             pass
 
     selected_idx = 0
+    selected_sid = None
     scroll_top = 0
     sessions_cache = load_cached_sessions()
     archived_sessions_cache = []
@@ -582,17 +583,25 @@ def draw_menu(stdscr):
             return (prio, time_key, sid)
 
         if local_sessions:
-            selected_idx = max(0, min(selected_idx, len(local_sessions) - 1))
-            curr_sel_sid = local_sessions[selected_idx].get("id") or local_sessions[selected_idx].get("name", "").split("/")[-1]
             local_sessions = sorted(local_sessions, key=get_session_priority)
-            if curr_sel_sid:
+            if selected_sid:
+                found_idx = None
                 for idx_s, s_elem in enumerate(local_sessions):
                     s_elem_id = s_elem.get("id") or s_elem.get("name", "").split("/")[-1]
-                    if s_elem_id == curr_sel_sid:
-                        selected_idx = idx_s
+                    if s_elem_id == selected_sid:
+                        found_idx = idx_s
                         break
+                if found_idx is not None:
+                    selected_idx = found_idx
+                else:
+                    selected_idx = max(0, min(selected_idx, len(local_sessions) - 1))
+                    selected_sid = local_sessions[selected_idx].get("id") or local_sessions[selected_idx].get("name", "").split("/")[-1]
+            else:
+                selected_idx = max(0, min(selected_idx, len(local_sessions) - 1))
+                selected_sid = local_sessions[selected_idx].get("id") or local_sessions[selected_idx].get("name", "").split("/")[-1]
         else:
             selected_idx = 0
+            selected_sid = None
             scroll_top = 0
 
         # Draw active session table
@@ -786,15 +795,14 @@ def draw_menu(stdscr):
                     # Mouse click on session row
                     for idx_item, (sy, ey) in session_row_map.items():
                         if sy <= my <= ey:
+                            selected_idx = idx_item
+                            selected_sid = local_sessions[selected_idx].get("id") or local_sessions[selected_idx].get("name", "").split("/")[-1]
                             if selected_idx == idx_item:
-                                # Double click / click already selected -> Open inspection modal
                                 curr_s = local_sessions[selected_idx]
                                 sid = curr_s.get("id") or curr_s.get("name", "").split("/")[-1]
                                 pre_data = local_details.get(sid)
                                 action_msg = prompt_reply(stdscr, sid, selected_idx + 1, preloaded_data=pre_data)
                                 last_fetch = 0
-                            else:
-                                selected_idx = idx_item
                             break
             except Exception:
                 pass
@@ -803,8 +811,12 @@ def draw_menu(stdscr):
             break
         elif key in (curses.KEY_UP, ord('k')) and selected_idx > 0:
             selected_idx -= 1
+            if local_sessions:
+                selected_sid = local_sessions[selected_idx].get("id") or local_sessions[selected_idx].get("name", "").split("/")[-1]
         elif key in (curses.KEY_DOWN, ord('j')) and local_sessions and selected_idx < len(local_sessions) - 1:
             selected_idx += 1
+            if local_sessions:
+                selected_sid = local_sessions[selected_idx].get("id") or local_sessions[selected_idx].get("name", "").split("/")[-1]
         elif key in (ord('s'), ord('S')):
             action_name = "Stop background listener service?" if svc_active else "Start background listener service?"
             if prompt_confirm(stdscr, action_name):
