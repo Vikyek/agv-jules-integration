@@ -709,14 +709,17 @@ def draw_menu(stdscr):
 
                 # Draw first line with metadata prefix
                 line1 = f"{meta_prefix}{wrapped_title[0]}"[:width-2]
-                if i == selected_idx:
-                    stdscr.attron(curses.color_pair(5) | curses.A_BOLD)
-                    stdscr.addstr(curr_y, 1, line1)
-                    stdscr.attroff(curses.color_pair(5) | curses.A_BOLD)
-                else:
-                    stdscr.attron(color)
-                    stdscr.addstr(curr_y, 1, line1)
-                    stdscr.attroff(color)
+                try:
+                    if i == selected_idx:
+                        stdscr.attron(curses.color_pair(5) | curses.A_BOLD)
+                        stdscr.addstr(curr_y, 1, line1)
+                        stdscr.attroff(curses.color_pair(5) | curses.A_BOLD)
+                    else:
+                        stdscr.attron(color)
+                        stdscr.addstr(curr_y, 1, line1)
+                        stdscr.attroff(color)
+                except Exception:
+                    pass
 
                 curr_y += 1
 
@@ -725,14 +728,17 @@ def draw_menu(stdscr):
                     if curr_y >= max_y:
                         break
                     indented_line = f"{' ' * meta_len}{extra_line}"[:width-2]
-                    if i == selected_idx:
-                        stdscr.attron(curses.color_pair(5) | curses.A_BOLD)
-                        stdscr.addstr(curr_y, 1, indented_line)
-                        stdscr.attroff(curses.color_pair(5) | curses.A_BOLD)
-                    else:
-                        stdscr.attron(color)
-                        stdscr.addstr(curr_y, 1, indented_line)
-                        stdscr.attroff(color)
+                    try:
+                        if i == selected_idx:
+                            stdscr.attron(curses.color_pair(5) | curses.A_BOLD)
+                            stdscr.addstr(curr_y, 1, indented_line)
+                            stdscr.attroff(curses.color_pair(5) | curses.A_BOLD)
+                        else:
+                            stdscr.attron(color)
+                            stdscr.addstr(curr_y, 1, indented_line)
+                            stdscr.attroff(color)
+                    except Exception:
+                        pass
                     curr_y += 1
 
                 session_row_map[i] = (start_y, curr_y - 1)
