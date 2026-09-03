@@ -553,12 +553,18 @@ def draw_menu(stdscr):
                 stuck_frame_cache[sid] = check_session_stuck_or_plan_loop(sid, preloaded_activities=pre_acts)
             return stuck_frame_cache[sid]
 
+        with fetch_lock:
+            local_sessions = list(sessions_cache)
+            local_details = dict(details_cache)
+            local_pr_status = dict(pr_status_cache)
+
         # Priority sort sessions: 0) Running/In-Progress -> 1) Completed/PR Created -> 2) Awaiting Input -> 3) Errored/Stuck
         def get_session_priority(s_item):
             st = str(s_item.get("state", "")).upper()
             sid = s_item.get("id") or s_item.get("name", "").split("/")[-1]
-            is_stuck, _ = get_stuck_info(sid)
-            pr_st = pr_status_cache.get(sid, {})
+            pre_acts = local_details.get(sid, {}).get("activities")
+            is_stuck, _ = check_session_stuck_or_plan_loop(sid, preloaded_activities=pre_acts)
+            pr_st = local_pr_status.get(sid, {})
             pr_failed = pr_st.get("status_checks_failing", False)
 
             if "IN_PROGRESS" in st or "RUNNING" in st:
@@ -572,12 +578,12 @@ def draw_menu(stdscr):
             else:
                 return 4
 
-        if sessions_cache:
-            selected_idx = max(0, min(selected_idx, len(sessions_cache) - 1))
-            curr_sel_sid = sessions_cache[selected_idx].get("id") if selected_idx < len(sessions_cache) else None
-            sessions_cache = sorted(sessions_cache, key=get_session_priority)
+        if local_sessions:
+            selected_idx = max(0, min(selected_idx, len(local_sessions) - 1))
+            curr_sel_sid = local_sessions[selected_idx].get("id") if selected_idx < len(local_sessions) else None
+            local_sessions = sorted(local_sessions, key=get_session_priority)
             if curr_sel_sid:
-                for idx_s, s_elem in enumerate(sessions_cache):
+                for idx_s, s_elem in enumerate(local_sessions):
                     if (s_elem.get("id") or s_elem.get("name", "").split("/")[-1]) == curr_sel_sid:
                         selected_idx = idx_s
                         break
@@ -593,10 +599,10 @@ def draw_menu(stdscr):
         curr_y = 5
         session_row_map = {}
 
-        if not sessions_cache:
+        if not local_sessions:
             stdscr.addstr(5, 2, "No active sessions found.", curses.color_pair(3))
         else:
-            selected_idx = max(0, min(selected_idx, len(sessions_cache) - 1))
+            selected_idx = max(0, min(selected_idx, len(local_sessions) - 1))
             if selected_idx < scroll_top:
                 scroll_top = selected_idx
 
@@ -604,7 +610,7 @@ def draw_menu(stdscr):
             while scroll_top < selected_idx:
                 calc_y = 5
                 for idx in range(scroll_top, selected_idx + 1):
-                    s_item = sessions_cache[idx]
+                    s_item = local_sessions[idx]
                     t_item = (s_item.get("title") or s_item.get("prompt", "")).replace("\n", " ")
                     meta_w = 40 if width >= 120 else 30
                     w_lines = textwrap.wrap(t_item, max(10, width - meta_w)) or [t_item]
@@ -614,11 +620,11 @@ def draw_menu(stdscr):
                 else:
                     break
 
-            for i in range(scroll_top, len(sessions_cache)):
+            for i in range(scroll_top, len(local_sessions)):
                 if curr_y >= max_y:
                     break
 
-                s = sessions_cache[i]
+                s = local_sessions[i]
                 state = s.get("state", "UNKNOWN")
                 raw_title = s.get("title", "")
                 if not raw_title or len(raw_title) > 100 or "\n" in raw_title:
@@ -778,9 +784,9 @@ def draw_menu(stdscr):
                         if sy <= my <= ey:
                             if selected_idx == idx_item:
                                 # Double click / click already selected -> Open inspection modal
-                                curr_s = sessions_cache[selected_idx]
+                                curr_s = local_sessions[selected_idx]
                                 sid = curr_s.get("id") or curr_s.get("name", "").split("/")[-1]
-                                pre_data = details_cache.get(sid)
+                                pre_data = local_details.get(sid)
                                 action_msg = prompt_reply(stdscr, sid, selected_idx + 1, preloaded_data=pre_data)
                                 last_fetch = 0
                             else:
@@ -793,7 +799,7 @@ def draw_menu(stdscr):
             break
         elif key in (curses.KEY_UP, ord('k')) and selected_idx > 0:
             selected_idx -= 1
-        elif key in (curses.KEY_DOWN, ord('j')) and selected_idx < len(sessions_cache) - 1:
+        elif key in (curses.KEY_DOWN, ord('j')) and local_sessions and selected_idx < len(local_sessions) - 1:
             selected_idx += 1
         elif key in (ord('s'), ord('S')):
             action_name = "Stop background listener service?" if svc_active else "Start background listener service?"
@@ -814,8 +820,8 @@ def draw_menu(stdscr):
         elif key in (ord('w'), ord('W')):
             import webbrowser
             url = "https://jules.google.com"
-            if sessions_cache and selected_idx < len(sessions_cache):
-                curr_s = sessions_cache[selected_idx]
+            if local_sessions and selected_idx < len(local_sessions):
+                curr_s = local_sessions[selected_idx]
                 sid = curr_s.get("id") or curr_s.get("name", "").split("/")[-1]
                 url = f"https://jules.google.com/task/{sid}"
             webbrowser.open(url)
@@ -828,8 +834,8 @@ def draw_menu(stdscr):
             action_msg = prompt_scheduled_panel(stdscr)
         elif key in (ord('v'), ord('V')):
             action_msg = prompt_archived_panel(stdscr, preloaded_archived=archived_sessions_cache)
-        elif key in (ord('u'), ord('U')) and sessions_cache:
-            curr_s = sessions_cache[selected_idx]
+        elif key in (ord('u'), ord('U')) and local_sessions:
+            curr_s = local_sessions[selected_idx]
             sid = curr_s.get("id") or curr_s.get("name", "").split("/")[-1]
             if prompt_confirm(stdscr, f"Unstuck session #{selected_idx + 1}?"):
                 msg_txt = "Re-evaluating task: Line 393 in paru-wrapper already uses double quotes around \"$@\". Run tests, finalize PR, and submit."
@@ -850,38 +856,39 @@ def draw_menu(stdscr):
             modes = ["continuous", "once", "paused"]
             curr = cfg.get("mode", "continuous")
             nxt = modes[(modes.index(curr) + 1) % len(modes)]
-            cfg["mode"] = nxt
+            cfg['mode'] = nxt
             save_config(cfg)
-            action_msg = f"Listener mode updated to: {nxt.upper()}"
+            action_msg = f"Mode set to [{nxt.upper()}]"
         elif key in (ord('o'), ord('O')):
-            agy_modes = ["plan", "accept-edits"]
-            curr_agy = cfg.get("agy_mode", "plan")
-            nxt_agy = agy_modes[(agy_modes.index(curr_agy) + 1) % len(agy_modes)]
-            cfg["agy_mode"] = nxt_agy
+            modes = ["plan", "act"]
+            curr = cfg.get("agy_mode", "plan")
+            nxt = modes[(modes.index(curr) + 1) % len(modes)]
+            cfg['agy_mode'] = nxt
             save_config(cfg)
-            action_msg = f"AGY execution mode updated to: {nxt_agy.upper()}"
+            action_msg = f"AGY Mode set to [{nxt.upper()}]"
         elif key in (ord('d'), ord('D')):
-            curr_skip = cfg.get("agy_skip_permissions", True)
-            nxt_skip = not curr_skip
-            cfg["agy_skip_permissions"] = nxt_skip
+            curr = cfg.get("agy_skip_permissions", True)
+            nxt = not curr
+            cfg['agy_skip_permissions'] = nxt
             save_config(cfg)
-            action_msg = f"AGY dangerously_skip_permissions updated to: {'ENABLED' if nxt_skip else 'DISABLED'}"
-        elif key in (ord('a'), ord('A')) and sessions_cache:
+            status_txt = "SKIP-PERMISSIONS ⚡" if nxt else "PROMPT-PERMISSIONS 🔒"
+            action_msg = f"AGY Permissions set to [{status_txt}]"
+        elif key in (ord('a'), ord('A')) and local_sessions:
             if prompt_confirm(stdscr, f"Archive session #{selected_idx + 1}?"):
-                curr_s = sessions_cache[selected_idx]
+                curr_s = local_sessions[selected_idx]
                 sid = curr_s.get("id") or curr_s.get("name", "").split("/")[-1]
                 archive_session(sid)
                 last_fetch = 0
                 action_msg = f"Archived session #{selected_idx + 1}"
             else:
                 action_msg = "Cancelled archiving session."
-        elif key in (ord('p'), ord('P')) and sessions_cache:
-            curr_s = sessions_cache[selected_idx]
+        elif key in (ord('p'), ord('P')) and local_sessions:
+            curr_s = local_sessions[selected_idx]
             action_msg = open_session_pr(curr_s)
-        elif key in (curses.KEY_ENTER, 10, 13) and sessions_cache:
-            curr_s = sessions_cache[selected_idx]
+        elif key in (curses.KEY_ENTER, 10, 13) and local_sessions:
+            curr_s = local_sessions[selected_idx]
             sid = curr_s.get("id") or curr_s.get("name", "").split("/")[-1]
-            pre_data = details_cache.get(sid)
+            pre_data = local_details.get(sid)
             action_msg = prompt_reply(stdscr, sid, selected_idx + 1, preloaded_data=pre_data)
             last_fetch = 0
 
