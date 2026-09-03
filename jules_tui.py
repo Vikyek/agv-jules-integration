@@ -616,6 +616,7 @@ def draw_menu(stdscr):
             stdscr.addstr(5, 2, "No active sessions found.", curses.color_pair(3))
         else:
             selected_idx = max(0, min(selected_idx, len(local_sessions) - 1))
+            scroll_top = max(0, min(scroll_top, len(local_sessions) - 1))
             if selected_idx < scroll_top:
                 scroll_top = selected_idx
 
