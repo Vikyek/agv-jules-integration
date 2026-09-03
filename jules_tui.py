@@ -558,7 +558,7 @@ def draw_menu(stdscr):
             local_details = dict(details_cache)
             local_pr_status = dict(pr_status_cache)
 
-        # Priority sort sessions: 0) Running/In-Progress -> 1) Completed/PR Created -> 2) Awaiting Input -> 3) Errored/Stuck
+        # Priority sort sessions with stable secondary keys: 0) Running/In-Progress -> 1) Completed/PR Created -> 2) Awaiting Input -> 3) Errored/Stuck
         def get_session_priority(s_item):
             st = str(s_item.get("state", "")).upper()
             sid = s_item.get("id") or s_item.get("name", "").split("/")[-1]
@@ -568,23 +568,27 @@ def draw_menu(stdscr):
             pr_failed = pr_st.get("status_checks_failing", False)
 
             if "IN_PROGRESS" in st or "RUNNING" in st:
-                return 0
+                prio = 0
             elif "COMPLETED" in st or "SUCCEEDED" in st or "RESOLVED" in st or "ARCHIVED" in st or pr_st.get("has_pr"):
-                return 1
+                prio = 1
             elif "AWAITING" in st or "INPUT" in st or "REVIEW" in st or "FEEDBACK" in st:
-                return 2
+                prio = 2
             elif is_stuck or pr_failed or "ERROR" in st or "FAILED" in st:
-                return 3
+                prio = 3
             else:
-                return 4
+                prio = 4
+
+            time_key = s_item.get("updateTime") or s_item.get("createTime") or ""
+            return (prio, time_key, sid)
 
         if local_sessions:
             selected_idx = max(0, min(selected_idx, len(local_sessions) - 1))
-            curr_sel_sid = local_sessions[selected_idx].get("id") if selected_idx < len(local_sessions) else None
+            curr_sel_sid = local_sessions[selected_idx].get("id") or local_sessions[selected_idx].get("name", "").split("/")[-1]
             local_sessions = sorted(local_sessions, key=get_session_priority)
             if curr_sel_sid:
                 for idx_s, s_elem in enumerate(local_sessions):
-                    if (s_elem.get("id") or s_elem.get("name", "").split("/")[-1]) == curr_sel_sid:
+                    s_elem_id = s_elem.get("id") or s_elem.get("name", "").split("/")[-1]
+                    if s_elem_id == curr_sel_sid:
                         selected_idx = idx_s
                         break
         else:
