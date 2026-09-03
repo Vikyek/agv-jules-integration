@@ -639,7 +639,7 @@ def draw_menu(stdscr):
                 clean_title = raw_title.lstrip("#").strip().replace("\n", " ")
                 title = clean_title
                 sid = s.get("id") or s.get("name", "").split("/")[-1]
-                pr_st = pr_status_cache.get(sid) or {
+                pr_st = local_pr_status.get(sid) or {
                     "has_pr": False, "pr_number": None, "status_checks_failing": False,
                     "has_review_issues": False, "mergeable": "UNKNOWN", "needs_update": False, "url": ""
                 }
