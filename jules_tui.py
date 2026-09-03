@@ -898,9 +898,11 @@ def toggle_systemd_service():
 def prompt_confirm(stdscr, question):
     """Displays a full-screen confirmation modal prompt returning True if user presses 'y'/'Y'."""
     stdscr.timeout(-1)
+    # Drain any queued/buffered input key events before prompt
+    curses.flushinp()
     while True:
         height, width = stdscr.getmaxyx()
-        stdscr.clear()
+        stdscr.erase()
 
         header = " ⚠️ CONFIRM ACTION "
         stdscr.attron(curses.color_pair(4) | curses.A_BOLD)
@@ -911,7 +913,7 @@ def prompt_confirm(stdscr, question):
         stdscr.addstr(height // 2 - 1, 0, question.center(width)[:width])
         stdscr.attroff(curses.color_pair(3) | curses.A_BOLD)
 
-        prompt_str = "Press [y] to Confirm | Press [n] or [ESC] to Cancel"
+        prompt_str = "Press [y] to Confirm | Press [n] or [ESC] or [q] to Cancel"
         stdscr.attron(curses.color_pair(1))
         stdscr.addstr(height // 2 + 1, 0, prompt_str.center(width)[:width])
         stdscr.attroff(curses.color_pair(1))
@@ -919,8 +921,10 @@ def prompt_confirm(stdscr, question):
         stdscr.refresh()
         ch = _get_key_with_mouse_wheel(stdscr)
         if ch in (ord('y'), ord('Y')):
+            curses.flushinp()
             return True
-        elif ch in (ord('n'), ord('N'), 27):
+        elif ch in (ord('n'), ord('N'), ord('q'), ord('Q'), 27, curses.KEY_CANCEL):
+            curses.flushinp()
             return False
 
 # Persistent Task Queue & Status Dictionary (Max 2 concurrent AGY processes)
