@@ -1763,6 +1763,7 @@ def prompt_archived_suggestions_panel(stdscr):
                 scroll_top = selected_idx
             elif selected_idx >= scroll_top + available_height:
                 scroll_top = selected_idx - max(1, available_height // 3) + 1
+            scroll_top = max(0, min(scroll_top, len(dismissed_set) - 1))
 
             for i in range(scroll_top, len(dismissed_set)):
                 if curr_y >= 2 + available_height:
@@ -1863,6 +1864,7 @@ def prompt_archived_panel(stdscr, preloaded_archived=None):
                 scroll_top = selected_idx
             elif selected_idx >= scroll_top + available_height:
                 scroll_top = selected_idx - max(1, available_height // 3) + 1
+            scroll_top = max(0, min(scroll_top, len(archived_sessions) - 1))
 
             for i in range(scroll_top, len(archived_sessions)):
                 if curr_y >= 2 + available_height:
@@ -2000,8 +2002,12 @@ def prompt_scheduled_panel(stdscr):
             stdscr.addstr(5, 2, "Press [c] to configure a new recurring scheduled task.", curses.color_pair(1))
         else:
             selected_idx = max(0, min(selected_idx, len(tasks) - 1))
+            available_rows = max(1, max_y - 2)
             if selected_idx < scroll_top:
                 scroll_top = selected_idx
+            elif selected_idx >= scroll_top + available_rows:
+                scroll_top = max(0, selected_idx - available_rows + 1)
+            scroll_top = max(0, min(scroll_top, len(tasks) - 1))
 
             for i in range(scroll_top, len(tasks)):
                 if curr_y >= max_y:
