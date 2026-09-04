@@ -412,6 +412,9 @@ def draw_menu(stdscr):
                 if new_sessions:
                     save_cached_sessions(new_sessions)
 
+                with fetch_lock:
+                    sessions_cache = new_sessions
+
                 new_details = {}
                 new_pr_status = {}
                 for s in new_sessions:
@@ -439,7 +442,6 @@ def draw_menu(stdscr):
                 new_sugs = fetch_jules_suggestions(filter_dismissed=False)
 
                 with fetch_lock:
-                    sessions_cache = new_sessions
                     archived_sessions_cache = new_archived
                     suggestions_cache = new_sugs
                     details_cache = new_details
