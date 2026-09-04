@@ -323,6 +323,10 @@ def open_session_pr(session):
 
 def draw_menu(stdscr):
     try:
+        curses.start_color()
+    except Exception:
+        pass
+    try:
         curses.curs_set(0)
     except Exception:
         pass
