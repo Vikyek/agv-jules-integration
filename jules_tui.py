@@ -512,6 +512,11 @@ def draw_menu(stdscr):
             user_stopped_service = False
         prev_svc_active = svc_active
 
+        with fetch_lock:
+            local_sessions = list(sessions_cache)
+            local_details = dict(details_cache)
+            local_pr_status = dict(pr_status_cache)
+
         try:
             # Subtle clean Braille spinner animation for active service
             curr_frame_idx = int(time.time() * 6)
@@ -560,11 +565,6 @@ def draw_menu(stdscr):
                     pre_acts = local_details.get(sid, {}).get("activities")
                     stuck_frame_cache[sid] = check_session_stuck_or_plan_loop(sid, preloaded_activities=pre_acts)
                 return stuck_frame_cache[sid]
-
-            with fetch_lock:
-                local_sessions = list(sessions_cache)
-                local_details = dict(details_cache)
-                local_pr_status = dict(pr_status_cache)
 
             # Priority sort sessions with stable secondary keys: 0) Running/In-Progress -> 1) Completed/PR Created -> 2) Awaiting Input -> 3) Errored/Stuck
             def get_session_priority(s_item):
