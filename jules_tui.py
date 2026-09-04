@@ -637,7 +637,7 @@ def draw_menu(stdscr):
                 scroll_top = max(0, min(scroll_top, selected_idx))
 
                 for i in range(scroll_top, len(local_sessions)):
-                    if curr_y >= max_y:
+                    if curr_y >= max_y and i > selected_idx:
                         break
 
                     s = local_sessions[i]
