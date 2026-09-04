@@ -641,9 +641,14 @@ def draw_menu(stdscr):
                 selected_sid = None
                 scroll_top = 0
 
-            # Draw active session table with animated loading indicator
+            # Draw active session table with animated loading indicator and live progress
             try:
-                fetch_status_str = f" {braille_icon} Syncing..." if is_fetching else ""
+                loaded_count = len(local_details)
+                total_count = len(local_sessions)
+                if is_fetching:
+                    fetch_status_str = f" {braille_icon} Syncing details ({loaded_count}/{total_count})..." if total_count > 0 else f" {braille_icon} Syncing..."
+                else:
+                    fetch_status_str = ""
                 stdscr.addstr(3, 1, f"ACTIVE SESSIONS:{fetch_status_str}", curses.A_BOLD)
             except Exception:
                 pass
