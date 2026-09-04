@@ -462,9 +462,9 @@ def draw_menu(stdscr):
 
                 with ThreadPoolExecutor(max_workers=min(8, max(1, len(new_sessions)))) as executor:
                     futures = [executor.submit(process_single_session, s) for s in new_sessions]
-                    for f in as_completed(futures, timeout=10):
+                    for f in as_completed(futures, timeout=5):
                         try:
-                            sid, det, pr_st = f.result(timeout=1)
+                            sid, det, pr_st = f.result(timeout=0.5)
                             new_details[sid] = det
                             new_pr_status[sid] = pr_st
                             with fetch_lock:
