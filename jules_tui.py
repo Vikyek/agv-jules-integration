@@ -416,50 +416,64 @@ def draw_menu(stdscr):
                 with fetch_lock:
                     sessions_cache = new_sessions
 
-                # Parallelize session activities and PR status checks using ThreadPoolExecutor for 10x faster startup
+                # Update details and PR status progressively so UI displays details immediately
                 new_details = {}
                 new_pr_status = {}
-                from concurrent.futures import ThreadPoolExecutor
+                from concurrent.futures import ThreadPoolExecutor, as_completed
 
                 def process_single_session(s):
                     sid = s.get("id") or s.get("name", "").split("/")[-1]
-                    if s.get("is_unassigned_pr"):
-                        det = {
-                            "session": s,
-                            "activities": {"activities": [{"agentMessaged": {"agentMessage": f"Unassigned Jules PR #{s.get('pr_number')} in {s.get('repo')} ({s.get('branch')})"}}]}
-                        }
-                    else:
-                        det = {
-                            "session": s,
-                            "activities": get_session_activities(sid)
-                        }
-                    pr_st = check_session_pr_status(s)
-                    return sid, det, pr_st
+                    try:
+                        if s.get("is_unassigned_pr"):
+                            det = {
+                                "session": s,
+                                "activities": {"activities": [{"agentMessaged": {"agentMessage": f"Unassigned Jules PR #{s.get('pr_number')} in {s.get('repo')} ({s.get('branch')})"}}]}
+                            }
+                        else:
+                            det = {
+                                "session": s,
+                                "activities": get_session_activities(sid)
+                            }
+                        pr_st = check_session_pr_status(s)
+                        return sid, det, pr_st
+                    except Exception:
+                        return sid, {"session": s, "activities": {}}, {}
 
-                with ThreadPoolExecutor(max_workers=min(12, max(1, len(new_sessions)))) as executor:
-                    results = list(executor.map(process_single_session, new_sessions))
-
-                for sid, det, pr_st in results:
-                    new_details[sid] = det
-                    new_pr_status[sid] = pr_st
+                with ThreadPoolExecutor(max_workers=min(8, max(1, len(new_sessions)))) as executor:
+                    futures = [executor.submit(process_single_session, s) for s in new_sessions]
+                    for f in as_completed(futures, timeout=10):
+                        try:
+                            sid, det, pr_st = f.result(timeout=1)
+                            new_details[sid] = det
+                            new_pr_status[sid] = pr_st
+                            with fetch_lock:
+                                details_cache[sid] = det
+                                pr_status_cache[sid] = pr_st
+                        except Exception:
+                            pass
 
                 # 2. Preload Archived Sessions Collection & Suggestions in Parallel
-                with ThreadPoolExecutor(max_workers=2) as executor:
-                    f_arch = executor.submit(list_sessions, True)
-                    from jules_scraper import fetch_jules_suggestions
-                    f_sugs = executor.submit(fetch_jules_suggestions, False)
-                    arch_res = f_arch.result()
-                    new_sugs = f_sugs.result()
+                try:
+                    with ThreadPoolExecutor(max_workers=2) as executor:
+                        f_arch = executor.submit(list_sessions, True)
+                        from jules_scraper import fetch_jules_suggestions
+                        f_sugs = executor.submit(fetch_jules_suggestions, False)
+                        arch_res = f_arch.result(timeout=5)
+                        new_sugs = f_sugs.result(timeout=5)
 
-                raw_arch = arch_res.get("sessions", []) if isinstance(arch_res, dict) else []
-                new_archived = [s for s in raw_arch if s.get("archived") or s.get("state") in ("ARCHIVED", "COMPLETED", "SUCCEEDED", "RESOLVED", "MERGED", "CLOSED")]
-                new_archived.sort(key=lambda x: x.get("updateTime") or x.get("createTime") or "")
+                    raw_arch = arch_res.get("sessions", []) if isinstance(arch_res, dict) else []
+                    new_archived = [s for s in raw_arch if s.get("archived") or s.get("state") in ("ARCHIVED", "COMPLETED", "SUCCEEDED", "RESOLVED", "MERGED", "CLOSED")]
+                    new_archived.sort(key=lambda x: x.get("updateTime") or x.get("createTime") or "")
+
+                    with fetch_lock:
+                        archived_sessions_cache = new_archived
+                        suggestions_cache = new_sugs
+                except Exception:
+                    pass
 
                 with fetch_lock:
-                    archived_sessions_cache = new_archived
-                    suggestions_cache = new_sugs
-                    details_cache = new_details
-                    pr_status_cache = new_pr_status
+                    details_cache.update(new_details)
+                    pr_status_cache.update(new_pr_status)
                     last_fetch = time.time()
             except Exception:
                 pass
