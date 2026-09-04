@@ -267,17 +267,35 @@ def get_unassigned_jules_prs(active_sessions):
                     if extracted_sid in active_sids:
                         continue
 
+                    mergeable = pr.get("mergeable", "UNKNOWN")
+                    status_checks = pr.get("statusCheckRollup", [])
+                    checks_failing = any(c.get("status") == "COMPLETED" and c.get("conclusion") in ("FAILURE", "TIMED_OUT", "CANCELLED", "ACTION_REQUIRED") for c in status_checks)
+                    workflow_pending = any(c.get("conclusion") == "ACTION_REQUIRED" or "approval" in str(c).lower() for c in status_checks)
+
                     synthetic_sid = extracted_sid if (extracted_sid and len(extracted_sid) >= 15) else f"pr-{repo_name}-{num}"
+                    
+                    if mergeable == "CONFLICTING":
+                        pr_state = "PR_CONFLICT ⚠️"
+                    elif workflow_pending:
+                        pr_state = "WORKFLOW_APPROVAL_REQ ⚡"
+                    elif checks_failing:
+                        pr_state = "PR_CHECK_FAIL ❌"
+                    else:
+                        pr_state = "UNASSIGNED_PR 🌿"
+
                     items.append({
                         "id": synthetic_sid,
                         "name": f"sessions/{synthetic_sid}",
                         "title": f"[{repo_name}] PR #{num}: {title}",
-                        "state": "UNASSIGNED_PR",
+                        "state": pr_state,
                         "is_unassigned_pr": True,
                         "pr_number": num,
                         "repo": repo_name,
                         "branch": branch,
                         "url": url,
+                        "mergeable": mergeable,
+                        "checks_failing": checks_failing,
+                        "workflow_pending": workflow_pending,
                         "prompt": f"Unassigned Jules PR #{num} in {repo_name} ({branch}): {title}\nURL: {url}",
                         "sourceContext": {
                             "source": f"sources/github/Vikyek/{repo_name}",
@@ -728,8 +746,12 @@ def draw_menu(stdscr):
                         color = curses.color_pair(6) | curses.A_BOLD
                         display_state = f"{stuck_reason}"
                     elif s.get("is_unassigned_pr"):
-                        color = curses.color_pair(1) | curses.A_BOLD
-                        display_state = "UNASSIGNED_PR 🌿"
+                        if "CONFLICT" in state or "APPROVAL" in state or "FAIL" in state:
+                            color = curses.color_pair(6) | curses.A_BOLD
+                            display_state = state
+                        else:
+                            color = curses.color_pair(1) | curses.A_BOLD
+                            display_state = "UNASSIGNED_PR 🌿"
                     elif pr_failed or pr_issues or pr_conflict:
                         color = curses.color_pair(6) | curses.A_BOLD
                         if pr_failed:
