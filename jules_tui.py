@@ -7,19 +7,26 @@ responding to session queries, and configuring listener execution mode.
 
 import curses
 
+_last_mouse_event = None
+
 def _get_key_with_mouse_wheel(stdscr):
+    global _last_mouse_event
     k = stdscr.getch()
     if k == curses.KEY_MOUSE:
         try:
-            _, mx, my, _, bstate = curses.getmouse()
+            _last_mouse_event = curses.getmouse()
+            _, mx, my, _, bstate = _last_mouse_event
             if bstate & getattr(curses, 'BUTTON4_PRESSED', 0):
                 return curses.KEY_UP
             elif bstate & getattr(curses, 'BUTTON5_PRESSED', 0):
                 return curses.KEY_DOWN
-            curses.ungetmouse(_, mx, my, _, bstate)
+            return curses.KEY_MOUSE
         except Exception:
             pass
     return k
+
+def _get_mouse_event():
+    return _last_mouse_event
 
 import os
 import sys
@@ -538,6 +545,7 @@ def draw_menu(stdscr):
     # Initial async trigger
     threading.Thread(target=check_svc_bg, daemon=True).start()
 
+    scroll_top = 0
     while True:
         stdscr.erase()
         height, width = stdscr.getmaxyx()
@@ -845,7 +853,7 @@ def draw_menu(stdscr):
             continue
         elif key == curses.KEY_MOUSE:
             try:
-                _, mx, my, _, bstate = curses.getmouse()
+                _, mx, my, _, bstate = _get_mouse_event()
                 if not (bstate & (curses.BUTTON1_CLICKED | curses.BUTTON1_RELEASED)):
                     continue
                 if my == 1:
@@ -988,6 +996,7 @@ def prompt_confirm(stdscr, question):
     stdscr.timeout(-1)
     # Drain any queued/buffered input key events before prompt
     curses.flushinp()
+    scroll_top = 0
     while True:
         height, width = stdscr.getmaxyx()
         stdscr.erase()
@@ -1041,6 +1050,7 @@ agy_task_status = load_agy_task_statuses()
 MAX_CONCURRENT_AGY = 2
 
 def agy_worker():
+    scroll_top = 0
     while True:
         item = task_queue.get()
         if item is None:
@@ -1130,7 +1140,7 @@ def prompt_suggestion_details_panel(stdscr, sug, agy_status=""):
     - Current status/error
     - Complete thought process, activity log, and action history timeline
     """
-    stdscr.timeout(-1)
+    stdscr.timeout(150)
     status_msg = ""
     scroll_top = 0
     title = sug.get("title", "")
@@ -1162,6 +1172,7 @@ def prompt_suggestion_details_panel(stdscr, sug, agy_status=""):
     except Exception:
         pass
 
+    scroll_top = 0
     while True:
         height, width = stdscr.getmaxyx()
         stdscr.clear()
@@ -1283,7 +1294,7 @@ def prompt_suggestions_panel(stdscr, preloaded_suggestions=None):
     Gives options to launch task in AGY (/plan) with context payload or spawn in Jules API.
     """
     from jules_scraper import fetch_jules_suggestions, load_dismissed_suggestions
-    stdscr.timeout(-1)
+    stdscr.timeout(150)
     selected_idx = 0
     scroll_top = 0
     selected_set = set()
@@ -1316,6 +1327,7 @@ def prompt_suggestions_panel(stdscr, preloaded_suggestions=None):
 
     suggestions = sort_suggestions_by_priority(suggestions)
 
+    scroll_top = 0
     while True:
         height, width = stdscr.getmaxyx()
         stdscr.erase()
@@ -1461,7 +1473,7 @@ def prompt_suggestions_panel(stdscr, preloaded_suggestions=None):
 
         if ch == curses.KEY_MOUSE:
             try:
-                _, mx, my, _, bstate = curses.getmouse()
+                _, mx, my, _, bstate = _get_mouse_event()
                 if not (bstate & (curses.BUTTON1_CLICKED | curses.BUTTON1_RELEASED)):
                     continue
                 if my >= height - sug_footer_height:
@@ -1696,7 +1708,8 @@ def prompt_suggestions_panel(stdscr, preloaded_suggestions=None):
 
 def prompt_action_history_panel(stdscr, filter_suggestions_only=False):
     """Displays a dedicated full-screen Global Action History Log panel specifying Title, Repo, Branch, and Action Type."""
-    stdscr.timeout(-1)
+    stdscr.timeout(150)
+    scroll_top = 0
     while True:
         height, width = stdscr.getmaxyx()
         stdscr.clear()
@@ -1778,7 +1791,9 @@ def prompt_action_history_panel(stdscr, filter_suggestions_only=False):
                 formatted_lines.append("")
 
         available_height = max(3, height - 5)
-        display_lines = formatted_lines[:available_height]
+        
+        scroll_top = max(0, min(scroll_top, max(0, len(formatted_lines) - available_height)))
+        display_lines = formatted_lines[scroll_top : scroll_top + available_height]
 
         for idx, l in enumerate(display_lines):
             stdscr.addstr(4 + idx, 3, l[:width-4])
@@ -1787,14 +1802,19 @@ def prompt_action_history_panel(stdscr, filter_suggestions_only=False):
         ch = _get_key_with_mouse_wheel(stdscr)
         if ch == 27:  # ESC key
             return "Returned."
+        elif ch in (curses.KEY_UP, ord('k')):
+            scroll_top -= 1
+        elif ch in (curses.KEY_DOWN, ord('j')):
+            scroll_top += 1
 
 def prompt_archived_suggestions_panel(stdscr):
     """Displays a dedicated full-screen Archived/Completed Suggestions panel."""
-    stdscr.timeout(-1)
+    stdscr.timeout(150)
     selected_idx = 0
     scroll_top = 0
     status_msg = ""
 
+    scroll_top = 0
     while True:
         height, width = stdscr.getmaxyx()
         stdscr.clear()
@@ -1879,7 +1899,7 @@ def prompt_archived_suggestions_panel(stdscr):
 
 def prompt_archived_panel(stdscr, preloaded_archived=None):
     """Displays a dedicated full-screen Archived Sessions Collection panel (stored archived session objects with auto vs manual tags)."""
-    stdscr.timeout(-1)
+    stdscr.timeout(150)
     selected_idx = 0
     scroll_top = 0
     status_msg = ""
@@ -1907,6 +1927,7 @@ def prompt_archived_panel(stdscr, preloaded_archived=None):
         archived_sessions = [s for s in raw_sessions if s.get("archived") or s.get("state") in ("ARCHIVED", "COMPLETED", "SUCCEEDED", "RESOLVED", "MERGED", "CLOSED")]
         archived_sessions.sort(key=lambda x: x.get("updateTime") or x.get("createTime") or "")
 
+    scroll_top = 0
     while True:
 
         footer_tips = "Keybindings: [u] unarchive | [Enter] inspect details | [ESC] return to active sessions"
@@ -2036,7 +2057,7 @@ import textwrap
 
 def prompt_scheduled_panel(stdscr):
     """Displays a dedicated full-screen Scheduled Tasks panel (listing recurring background maintenance tasks)."""
-    stdscr.timeout(-1)
+    stdscr.timeout(150)
     selected_idx = 0
     scroll_top = 0
     status_msg = ""
@@ -2044,6 +2065,7 @@ def prompt_scheduled_panel(stdscr):
     from jules_scraper import fetch_scheduled_tasks, create_scheduled_task
     tasks = fetch_scheduled_tasks()
 
+    scroll_top = 0
     while True:
         height, width = stdscr.getmaxyx()
         stdscr.clear()
@@ -2143,9 +2165,10 @@ def prompt_reply(stdscr, session_id, local_num, preloaded_data=None):
         pass
 
     # Full screen modal loop (blocking, no timeout, handles resize)
-    stdscr.timeout(-1)
+    stdscr.timeout(150)
     input_text = ""
     reply_active = False
+    scroll_offset = 0
     status_err = ""
 
     while True:
@@ -2224,8 +2247,12 @@ def prompt_reply(stdscr, session_id, local_num, preloaded_data=None):
         
         # Display the bottom-most lines of q_lines if content exceeds available height
         if len(q_lines) > max_lines_allowed:
-            display_lines = q_lines[-max_lines_allowed:]
+            max_offset = len(q_lines) - max_lines_allowed
+            scroll_offset = max(0, min(scroll_offset, max_offset))
+            start_idx = len(q_lines) - max_lines_allowed - scroll_offset
+            display_lines = q_lines[start_idx : start_idx + max_lines_allowed]
         else:
+            scroll_offset = 0
             display_lines = q_lines
 
         for i, line_str in enumerate(display_lines):
@@ -2267,6 +2294,12 @@ def prompt_reply(stdscr, session_id, local_num, preloaded_data=None):
                 continue
             else:
                 return "Exited session inspection panel."
+        elif not reply_active and ch in (curses.KEY_UP, ord('k')):
+            scroll_offset += 1
+            continue
+        elif not reply_active and ch in (curses.KEY_DOWN, ord('j')):
+            scroll_offset -= 1
+            continue
         elif not reply_active and ch in (ord('r'), ord('R')):
             reply_active = True
             status_err = ""
