@@ -162,20 +162,25 @@ def check_jules_api_queries():
                         if query_text:
                             break
 
-            # Classification logic: Auto-respond to routine confirmations/approvals
+            # Classification logic: Distinguish simple proceed confirmations from technical questions requiring AGY resolution
             full_content = (prompt_text + " " + query_text).lower()
             
+            # Simple confirmation keywords
+            is_simple_proceed = any(kw in query_text.lower() for kw in [
+                "should i proceed", "shall i proceed", "confirm to proceed", "ready to proceed", "proceed with", "approval to start", "confirm implementation"
+            ]) and len(query_text.split()) < 30
+
             # Only flag as critical if explicitly requesting secret/credential input or irreversible destructive action
             is_critical = any(kw in full_content for kw in [
                 "password", "private key", "secret_key", "delete production database", "manual authentication token"
             ])
-            
-            if not is_critical:
-                # Auto-handle routine technical feedback / proceed confirmation
+
+            if is_simple_proceed and not is_critical:
+                # Auto-handle routine proceed confirmation
                 auto_reply = "Proceed with standard implementation, run full unit tests, and format PR with summary."
                 send_res = send_message(session_id, auto_reply)
                 if "error" not in send_res:
-                    print(f"⚡ [Jules Listener] Auto-handled session {session_id} query: '{auto_reply}'")
+                    print(f"⚡ [Jules Listener] Auto-handled simple proceed confirmation for session {session_id}")
                     from jules_manager import log_action
                     prompt_txt = session.get("prompt", "")
                     clean_t = prompt_txt.splitlines()[0][:80] if prompt_txt else "Session"
@@ -184,8 +189,31 @@ def check_jules_api_queries():
                     br_name = src_ctx.get("githubRepoContext", {}).get("startingBranch", "main")
                     log_action(session_id, "AUTO_REPLY", auto_reply, title=clean_t, repo=rep_name, branch=br_name, action_by="auto", query=query_text[:200])
                     continue
+            elif not is_critical and query_text.strip():
+                # Technical question/choice: Invoke AGY worker to generate contextual resolution
+                print(f"🧠 [Jules Listener] Generating AGY response for technical query in session {session_id}...")
+                try:
+                    src_ctx = session.get("sourceContext", {})
+                    rep_name = src_ctx.get("source", "").replace("sources/github/", "").replace("sources/", "")
+                    repo_dir = os.path.join(PROJECTS_DIR, os.path.basename(rep_name)) if rep_name else PROJECTS_DIR
+                    
+                    agy_cmd = ["agy", "-m", "flash", "-e", "0", f"Given the task prompt: '{prompt_text[:300]}' and worker query: '{query_text[:400]}', provide a concise, expert resolution instruction in 1-2 short sentences."]
+                    res = subprocess.run(agy_cmd, cwd=repo_dir if os.path.exists(repo_dir) else PROJECTS_DIR, capture_output=True, text=True, timeout=45)
+                    generated_answer = res.stdout.strip()
+                    if res.returncode == 0 and generated_answer:
+                        send_res = send_message(session_id, generated_answer)
+                        if "error" not in send_res:
+                            print(f"🤖 [Jules Listener] Sent AGY generated reply to session {session_id}: '{generated_answer}'")
+                            from jules_manager import log_action
+                            prompt_txt = session.get("prompt", "")
+                            clean_t = prompt_txt.splitlines()[0][:80] if prompt_txt else "Session"
+                            br_name = src_ctx.get("githubRepoContext", {}).get("startingBranch", "main")
+                            log_action(session_id, "AGY_REPLY", generated_answer, title=clean_t, repo=rep_name, branch=br_name, action_by="auto", query=query_text[:200])
+                            continue
+                except Exception as e:
+                    print(f"⚠️ [Jules Listener] Failed to generate AGY answer: {e}")
 
-            # Flag critical query for explicit user attention
+            # Flag critical or unhandled query for explicit user attention
             pending_queries.append({
                 "session_id": session_id,
                 "state": state,
