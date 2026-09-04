@@ -72,7 +72,7 @@ def load_agy_actions_cached():
         pass
     return _AGY_ACTIONS_CACHE
 
-def check_session_stuck_or_plan_loop(session_id, preloaded_activities=None):
+def check_session_stuck_or_plan_loop(session_id, preloaded_activities=None, preloaded_actions=None):
     """
     Inspects session activity stream to detect if worker is stuck or trapped in a plan/patch loop
     (e.g., multiple planGenerated, repeated failing patches, or un-stuck request needed).
@@ -105,20 +105,21 @@ def check_session_stuck_or_plan_loop(session_id, preloaded_activities=None):
         # Check persistent action log for UNSTUCK_PROMPT timestamp_epoch
         last_unstuck_epoch = 0
         try:
-            all_actions = load_agy_actions_cached()
+            all_actions = preloaded_actions if preloaded_actions is not None else load_agy_actions_cached()
             events = all_actions.get(session_id, [])
-            for ev in reversed(events):
-                if ev.get("action") in ("UNSTUCK_PROMPT", "AUTO_REPLY") or "unstuck" in ev.get("message", "").lower():
-                    last_unstuck_epoch = ev.get("timestamp_epoch", 0)
-                    if not last_unstuck_epoch and ev.get("timestamp"):
-                        import datetime
-                        try:
-                            dt = datetime.datetime.strptime(ev["timestamp"], "%Y-%m-%d %H:%M:%S")
-                            last_unstuck_epoch = dt.timestamp()
-                        except Exception:
-                            pass
-                    if last_unstuck_epoch > 0:
-                        break
+            if isinstance(events, list):
+                for ev in reversed(events):
+                    if ev.get("action") in ("UNSTUCK_PROMPT", "AUTO_REPLY") or "unstuck" in str(ev.get("message", "")).lower():
+                        last_unstuck_epoch = ev.get("timestamp_epoch", 0)
+                        if not last_unstuck_epoch and ev.get("timestamp"):
+                            import datetime
+                            try:
+                                dt = datetime.datetime.strptime(ev["timestamp"], "%Y-%m-%d %H:%M:%S")
+                                last_unstuck_epoch = dt.timestamp()
+                            except Exception:
+                                pass
+                        if last_unstuck_epoch > 0:
+                            break
         except Exception:
             pass
 
@@ -562,18 +563,18 @@ def draw_menu(stdscr):
             footer_lines = [l.strip().lstrip("|").rstrip("|").strip() for l in raw_footer_lines]
             footer_height = len(footer_lines)
             stuck_frame_cache = {}
+            local_agy_actions = load_agy_actions_cached()
             def get_stuck_info(sid):
                 if sid not in stuck_frame_cache:
                     pre_acts = local_details.get(sid, {}).get("activities")
-                    stuck_frame_cache[sid] = check_session_stuck_or_plan_loop(sid, preloaded_activities=pre_acts)
+                    stuck_frame_cache[sid] = check_session_stuck_or_plan_loop(sid, preloaded_activities=pre_acts, preloaded_actions=local_agy_actions)
                 return stuck_frame_cache[sid]
 
             # Priority sort sessions with stable secondary keys: 0) Running/In-Progress -> 1) Completed/PR Created -> 2) Awaiting Input -> 3) Errored/Stuck
             def get_session_priority(s_item):
                 st = str(s_item.get("state", "")).upper()
                 sid = s_item.get("id") or s_item.get("name", "").split("/")[-1]
-                pre_acts = local_details.get(sid, {}).get("activities")
-                is_stuck, _ = check_session_stuck_or_plan_loop(sid, preloaded_activities=pre_acts)
+                is_stuck, _ = get_stuck_info(sid)
                 pr_st = local_pr_status.get(sid, {})
                 pr_failed = pr_st.get("status_checks_failing", False)
 
