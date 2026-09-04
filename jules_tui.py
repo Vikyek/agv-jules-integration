@@ -512,259 +512,278 @@ def draw_menu(stdscr):
             user_stopped_service = False
         prev_svc_active = svc_active
 
-        # Subtle clean Braille spinner animation for active service
-        curr_frame_idx = int(time.time() * 6)
-        braille_icon = braille_swirl[curr_frame_idx % len(braille_swirl)]
-        listen_icon = listen_frames[curr_frame_idx % len(listen_frames)] if svc_active else "OFF"
+        try:
+            # Subtle clean Braille spinner animation for active service
+            curr_frame_idx = int(time.time() * 6)
+            braille_icon = braille_swirl[curr_frame_idx % len(braille_swirl)]
+            listen_icon = listen_frames[curr_frame_idx % len(listen_frames)] if svc_active else "OFF"
 
-        # Header (Yellow background normally, Red background with Black text if unexpected stop or service stopped)
-        header_color = curses.color_pair(6) | curses.A_BOLD if (not svc_active and not user_stopped_service) else curses.color_pair(4) | curses.A_BOLD
-        header_title = " 󱚝 JULES VANAGER " if width < 80 else " 󱚝 GOOGLE JULES API VANAGER & LISTENER TUI "
-        stdscr.attron(header_color)
-        stdscr.addstr(0, 0, header_title.center(width)[:width])
-        stdscr.attroff(header_color)
+            # Header (Yellow background normally, Red background with Black text if unexpected stop or service stopped)
+            header_color = curses.color_pair(6) | curses.A_BOLD if (not svc_active and not user_stopped_service) else curses.color_pair(4) | curses.A_BOLD
+            header_title = " 󱚝 JULES VANAGER " if width < 80 else " 󱚝 GOOGLE JULES API VANAGER & LISTENER TUI "
+            try:
+                stdscr.attron(header_color)
+                stdscr.addstr(0, 0, header_title.center(width)[:width])
+                stdscr.attroff(header_color)
+            except Exception:
+                pass
 
-        # Mode line (Centered) - Service Disabled / Stopped shown in Red
-        agy_mode_val = cfg.get('agy_mode', 'plan').upper()
-        agy_perm_val = "SKIP-PERMS ⚡" if cfg.get('agy_skip_permissions', True) else "PROMPT-PERMS 🔒"
-        if width < 80:
-            mode_str = f"Svc:[{svc_str} {listen_icon}] AGY:[{agy_mode_val}]"
-        else:
-            mode_str = f"Mode: [{cfg.get('mode', 'continuous').upper()}] | AGY: [{agy_mode_val}] | Perms: [{agy_perm_val}] | Svc: [{svc_str} {listen_icon}]"
-            
-        mode_color = curses.color_pair(6) | curses.A_BOLD if not svc_active else curses.color_pair(1) | curses.A_BOLD
-        stdscr.attron(mode_color)
-        stdscr.addstr(1, 0, mode_str.center(width)[:width])
-        stdscr.attroff(mode_color)
-
-        # Trigger non-blocking background fetch if cache stale or empty
-        now = time.time()
-        if now - last_fetch > 10 or not sessions_cache:
-            bg_fetch()
-
-        # Multi-line footer keybindings bar wrapping calculation
-        full_tips = f"Keybindings: [s]\u00A0{'stop' if svc_active else 'start'}\u00A0service | [u]\u00A0unstuck\u00A0session | [g]\u00A0suggestions | [t]\u00A0scheduled\u00A0tasks | [o]\u00A0AGY\u00A0mode | [d]\u00A0AGY\u00A0perms | [b]\u00A0autostart | [p]\u00A0open\u00A0PR | [w]\u00A0Jules\u00A0web\u00A0UI | [h]\u00A0history\u00A0log | [v]\u00A0archived\u00A0collection | [q]\u00A0quit"
-        raw_footer_lines = textwrap.wrap(full_tips, max(20, width - 4)) or [full_tips]
-        footer_lines = [l.strip().lstrip("|").rstrip("|").strip() for l in raw_footer_lines]
-        footer_height = len(footer_lines)
-        stuck_frame_cache = {}
-        def get_stuck_info(sid):
-            if sid not in stuck_frame_cache:
-                pre_acts = details_cache.get(sid, {}).get("activities")
-                stuck_frame_cache[sid] = check_session_stuck_or_plan_loop(sid, preloaded_activities=pre_acts)
-            return stuck_frame_cache[sid]
-
-        with fetch_lock:
-            local_sessions = list(sessions_cache)
-            local_details = dict(details_cache)
-            local_pr_status = dict(pr_status_cache)
-
-        # Priority sort sessions with stable secondary keys: 0) Running/In-Progress -> 1) Completed/PR Created -> 2) Awaiting Input -> 3) Errored/Stuck
-        def get_session_priority(s_item):
-            st = str(s_item.get("state", "")).upper()
-            sid = s_item.get("id") or s_item.get("name", "").split("/")[-1]
-            pre_acts = local_details.get(sid, {}).get("activities")
-            is_stuck, _ = check_session_stuck_or_plan_loop(sid, preloaded_activities=pre_acts)
-            pr_st = local_pr_status.get(sid, {})
-            pr_failed = pr_st.get("status_checks_failing", False)
-
-            if "IN_PROGRESS" in st or "RUNNING" in st:
-                prio = 0
-            elif "COMPLETED" in st or "SUCCEEDED" in st or "RESOLVED" in st or "ARCHIVED" in st or pr_st.get("has_pr"):
-                prio = 1
-            elif "AWAITING" in st or "INPUT" in st or "REVIEW" in st or "FEEDBACK" in st:
-                prio = 2
-            elif is_stuck or pr_failed or "ERROR" in st or "FAILED" in st:
-                prio = 3
+            # Mode line (Centered) - Service Disabled / Stopped shown in Red
+            agy_mode_val = cfg.get('agy_mode', 'plan').upper()
+            agy_perm_val = "SKIP-PERMS ⚡" if cfg.get('agy_skip_permissions', True) else "PROMPT-PERMS 🔒"
+            if width < 80:
+                mode_str = f"Svc:[{svc_str} {listen_icon}] AGY:[{agy_mode_val}]"
             else:
-                prio = 4
+                mode_str = f"Mode: [{cfg.get('mode', 'continuous').upper()}] | AGY: [{agy_mode_val}] | Perms: [{agy_perm_val}] | Svc: [{svc_str} {listen_icon}]"
+                
+            mode_color = curses.color_pair(6) | curses.A_BOLD if not svc_active else curses.color_pair(1) | curses.A_BOLD
+            try:
+                stdscr.attron(mode_color)
+                stdscr.addstr(1, 0, mode_str.center(width)[:width])
+                stdscr.attroff(mode_color)
+            except Exception:
+                pass
 
-            time_key = s_item.get("updateTime") or s_item.get("createTime") or ""
-            return (prio, time_key, sid)
+            # Trigger non-blocking background fetch if cache stale or empty
+            now = time.time()
+            if now - last_fetch > 10 or not sessions_cache:
+                bg_fetch()
 
-        if local_sessions:
-            local_sessions = sorted(local_sessions, key=get_session_priority)
-            if selected_sid:
-                found_idx = None
-                for idx_s, s_elem in enumerate(local_sessions):
-                    s_elem_id = s_elem.get("id") or s_elem.get("name", "").split("/")[-1]
-                    if s_elem_id == selected_sid:
-                        found_idx = idx_s
-                        break
-                if found_idx is not None:
-                    selected_idx = found_idx
+            # Multi-line footer keybindings bar wrapping calculation
+            full_tips = f"Keybindings: [s]\u00A0{'stop' if svc_active else 'start'}\u00A0service | [u]\u00A0unstuck\u00A0session | [g]\u00A0suggestions | [t]\u00A0scheduled\u00A0tasks | [o]\u00A0AGY\u00A0mode | [d]\u00A0AGY\u00A0perms | [b]\u00A0autostart | [p]\u00A0open\u00A0PR | [w]\u00A0Jules\u00A0web\u00A0UI | [h]\u00A0history\u00A0log | [v]\u00A0archived\u00A0collection | [q]\u00A0quit"
+            raw_footer_lines = textwrap.wrap(full_tips, max(20, width - 4)) or [full_tips]
+            footer_lines = [l.strip().lstrip("|").rstrip("|").strip() for l in raw_footer_lines]
+            footer_height = len(footer_lines)
+            stuck_frame_cache = {}
+            def get_stuck_info(sid):
+                if sid not in stuck_frame_cache:
+                    pre_acts = local_details.get(sid, {}).get("activities")
+                    stuck_frame_cache[sid] = check_session_stuck_or_plan_loop(sid, preloaded_activities=pre_acts)
+                return stuck_frame_cache[sid]
+
+            with fetch_lock:
+                local_sessions = list(sessions_cache)
+                local_details = dict(details_cache)
+                local_pr_status = dict(pr_status_cache)
+
+            # Priority sort sessions with stable secondary keys: 0) Running/In-Progress -> 1) Completed/PR Created -> 2) Awaiting Input -> 3) Errored/Stuck
+            def get_session_priority(s_item):
+                st = str(s_item.get("state", "")).upper()
+                sid = s_item.get("id") or s_item.get("name", "").split("/")[-1]
+                pre_acts = local_details.get(sid, {}).get("activities")
+                is_stuck, _ = check_session_stuck_or_plan_loop(sid, preloaded_activities=pre_acts)
+                pr_st = local_pr_status.get(sid, {})
+                pr_failed = pr_st.get("status_checks_failing", False)
+
+                if "IN_PROGRESS" in st or "RUNNING" in st:
+                    prio = 0
+                elif "COMPLETED" in st or "SUCCEEDED" in st or "RESOLVED" in st or "ARCHIVED" in st or pr_st.get("has_pr"):
+                    prio = 1
+                elif "AWAITING" in st or "INPUT" in st or "REVIEW" in st or "FEEDBACK" in st:
+                    prio = 2
+                elif is_stuck or pr_failed or "ERROR" in st or "FAILED" in st:
+                    prio = 3
+                else:
+                    prio = 4
+
+                time_key = s_item.get("updateTime") or s_item.get("createTime") or ""
+                return (prio, time_key, sid)
+
+            if local_sessions:
+                local_sessions = sorted(local_sessions, key=get_session_priority)
+                if selected_sid:
+                    found_idx = None
+                    for idx_s, s_elem in enumerate(local_sessions):
+                        s_elem_id = s_elem.get("id") or s_elem.get("name", "").split("/")[-1]
+                        if s_elem_id == selected_sid:
+                            found_idx = idx_s
+                            break
+                    if found_idx is not None:
+                        selected_idx = found_idx
+                    else:
+                        selected_idx = max(0, min(selected_idx, len(local_sessions) - 1))
+                        selected_sid = local_sessions[selected_idx].get("id") or local_sessions[selected_idx].get("name", "").split("/")[-1]
                 else:
                     selected_idx = max(0, min(selected_idx, len(local_sessions) - 1))
                     selected_sid = local_sessions[selected_idx].get("id") or local_sessions[selected_idx].get("name", "").split("/")[-1]
             else:
-                selected_idx = max(0, min(selected_idx, len(local_sessions) - 1))
-                selected_sid = local_sessions[selected_idx].get("id") or local_sessions[selected_idx].get("name", "").split("/")[-1]
-        else:
-            selected_idx = 0
-            selected_sid = None
-            scroll_top = 0
+                selected_idx = 0
+                selected_sid = None
+                scroll_top = 0
 
-        # Draw active session table
-        stdscr.addstr(3, 1, "ACTIVE SESSIONS:", curses.A_BOLD)
-        
-        # Calculate available vertical space for sessions list
-        max_y = height - footer_height - (1 if action_msg else 0) - 1
-        curr_y = 5
-        session_row_map = {}
+            # Draw active session table
+            try:
+                stdscr.addstr(3, 1, "ACTIVE SESSIONS:", curses.A_BOLD)
+            except Exception:
+                pass
+            
+            # Calculate available vertical space for sessions list
+            max_y = height - footer_height - (1 if action_msg else 0) - 1
+            curr_y = 5
+            session_row_map = {}
 
-        if not local_sessions:
-            stdscr.addstr(5, 2, "No active sessions found.", curses.color_pair(3))
-        else:
-            selected_idx = max(0, min(selected_idx, len(local_sessions) - 1))
-            available_rows = max(1, (max_y - 5) // 2)
-            if selected_idx < scroll_top:
-                scroll_top = selected_idx
-            elif selected_idx >= scroll_top + available_rows:
-                scroll_top = max(0, selected_idx - available_rows + 1)
-            scroll_top = max(0, min(scroll_top, selected_idx))
-
-            for i in range(scroll_top, len(local_sessions)):
-                if curr_y >= max_y:
-                    break
-
-                s = local_sessions[i]
-                state = s.get("state", "UNKNOWN")
-                raw_title = s.get("title", "")
-                if not raw_title or len(raw_title) > 100 or "\n" in raw_title:
-                    title_lines = [l.strip() for l in (raw_title or s.get("prompt", "")).splitlines() if l.strip()]
-                    raw_title = title_lines[0] if title_lines else "Untitled Session"
-                    if ("Security Vulnerability" in raw_title or "Performance Optimization" in raw_title or "Testing Improvement" in raw_title) and len(title_lines) > 1:
-                        for line in title_lines[1:]:
-                            if "Issue:" in line or "File:" in line:
-                                raw_title = line
-                                break
-
-                clean_title = raw_title.lstrip("#").strip().replace("\n", " ")
-                title = clean_title
-                sid = s.get("id") or s.get("name", "").split("/")[-1]
-                pr_st = local_pr_status.get(sid) or {
-                    "has_pr": False, "pr_number": None, "status_checks_failing": False,
-                    "has_review_issues": False, "mergeable": "UNKNOWN", "needs_update": False, "url": ""
-                }
-                has_pr = pr_st["has_pr"]
-                pr_failed = pr_st["status_checks_failing"]
-                pr_issues = pr_st["has_review_issues"]
-                pr_conflict = pr_st["needs_update"]
-
-                is_stuck, stuck_reason = get_stuck_info(sid)
-
-                if is_stuck:
-                    color = curses.color_pair(6) | curses.A_BOLD
-                    display_state = f"{stuck_reason}"
-                elif s.get("is_unassigned_pr"):
-                    color = curses.color_pair(1) | curses.A_BOLD
-                    display_state = "UNASSIGNED_PR 🌿"
-                elif pr_failed or pr_issues or pr_conflict:
-                    color = curses.color_pair(6) | curses.A_BOLD
-                    if pr_failed:
-                        display_state = "PR_CHECK_FAIL ❌"
-                    elif pr_conflict:
-                        display_state = "PR_CONFLICT ⚠️"
-                    else:
-                        display_state = "PR_REVIEW_ISSUE ⚠️"
-                elif "AWAITING" in state:
-                    color = curses.color_pair(6) | curses.A_BOLD
-                    display_state = "USER_INPUT_REQ ⚡"
-                elif ("COMPLETED" in state or "SUCCEEDED" in state or "RESOLVED" in state or "ARCHIVED" in state) and has_pr:
-                    color = curses.color_pair(2)
-                    display_state = "PR_CREATED 🔗"
-                elif "COMPLETED" in state or "SUCCEEDED" in state or "RESOLVED" in state or "ARCHIVED" in state:
-                    color = curses.color_pair(2)
-                    display_state = state
-                elif "FEEDBACK" in state or "INPUT" in state or "REVIEW" in state or "PAUSED" in state:
-                    color = curses.color_pair(6) | curses.A_BOLD
-                    display_state = f"{state} ⚠️"
-                elif ("IN_PROGRESS" in state or "RUNNING" in state) and has_pr:
-                    color = curses.color_pair(1) | curses.A_BOLD
-                    display_state = f"PR_CREATED {braille_icon}"
-                elif "IN_PROGRESS" in state or "RUNNING" in state:
-                    color = curses.color_pair(1) | curses.A_BOLD
-                    display_state = f"{state} {braille_icon}"
-                else:
-                    color = curses.color_pair(1)
-                    display_state = state
-
-                prefix = ">" if i == selected_idx else " "
-                local_num = i + 1
-
-                if width < 80:
-                    short_state = display_state.replace("AWAITING_USER_FEEDBACK", "FEEDBACK").replace("IN_PROGRESS", "RUNNING").replace("STUCK_PATCH", "STUCK").replace("UNASSIGNED_PR", "PR_UNASSIGNED")
-                    meta_prefix = f"{prefix} [#{local_num}] {short_state[:14]} | "
-                elif width < 120:
-                    short_state = display_state.replace("AWAITING_USER_FEEDBACK", "FEEDBACK")
-                    meta_prefix = f"{prefix} [#{local_num:<2}] {short_state:<20} | "
-                else:
-                    meta_prefix = f"{prefix} [#{local_num:<2}] {display_state:<28} | "
-
-                meta_len = len(meta_prefix)
-                title_width = max(10, width - meta_len - 3)
-                wrapped_title = textwrap.wrap(title, title_width) or [title]
-
-                start_y = curr_y
-
-                # Draw first line with metadata prefix
-                line1 = f"{meta_prefix}{wrapped_title[0]}"[:width-2]
+            if not local_sessions:
                 try:
-                    if i == selected_idx:
-                        stdscr.attron(curses.color_pair(5) | curses.A_BOLD)
-                        stdscr.addstr(curr_y, 1, line1)
-                        stdscr.attroff(curses.color_pair(5) | curses.A_BOLD)
-                    else:
-                        stdscr.attron(color)
-                        stdscr.addstr(curr_y, 1, line1)
-                        stdscr.attroff(color)
+                    stdscr.addstr(5, 2, "No active sessions found.", curses.color_pair(3))
                 except Exception:
                     pass
+            else:
+                selected_idx = max(0, min(selected_idx, len(local_sessions) - 1))
+                available_rows = max(1, (max_y - 5) // 2)
+                if selected_idx < scroll_top:
+                    scroll_top = selected_idx
+                elif selected_idx >= scroll_top + available_rows:
+                    scroll_top = max(0, selected_idx - available_rows + 1)
+                scroll_top = max(0, min(scroll_top, selected_idx))
 
-                curr_y += 1
-
-                # Draw wrapped title lines indented under the title column
-                for extra_line in wrapped_title[1:]:
+                for i in range(scroll_top, len(local_sessions)):
                     if curr_y >= max_y:
                         break
-                    indented_line = f"{' ' * meta_len}{extra_line}"[:width-2]
+
+                    s = local_sessions[i]
+                    state = s.get("state", "UNKNOWN")
+                    raw_title = s.get("title", "")
+                    if not raw_title or len(raw_title) > 100 or "\n" in raw_title:
+                        title_lines = [l.strip() for l in (raw_title or s.get("prompt", "")).splitlines() if l.strip()]
+                        raw_title = title_lines[0] if title_lines else "Untitled Session"
+                        if ("Security Vulnerability" in raw_title or "Performance Optimization" in raw_title or "Testing Improvement" in raw_title) and len(title_lines) > 1:
+                            for line in title_lines[1:]:
+                                if "Issue:" in line or "File:" in line:
+                                    raw_title = line
+                                    break
+
+                    clean_title = raw_title.lstrip("#").strip().replace("\n", " ")
+                    title = clean_title
+                    sid = s.get("id") or s.get("name", "").split("/")[-1]
+                    pr_st = local_pr_status.get(sid) or {
+                        "has_pr": False, "pr_number": None, "status_checks_failing": False,
+                        "has_review_issues": False, "mergeable": "UNKNOWN", "needs_update": False, "url": ""
+                    }
+                    has_pr = pr_st["has_pr"]
+                    pr_failed = pr_st["status_checks_failing"]
+                    pr_issues = pr_st["has_review_issues"]
+                    pr_conflict = pr_st["needs_update"]
+
+                    is_stuck, stuck_reason = get_stuck_info(sid)
+
+                    if is_stuck:
+                        color = curses.color_pair(6) | curses.A_BOLD
+                        display_state = f"{stuck_reason}"
+                    elif s.get("is_unassigned_pr"):
+                        color = curses.color_pair(1) | curses.A_BOLD
+                        display_state = "UNASSIGNED_PR 🌿"
+                    elif pr_failed or pr_issues or pr_conflict:
+                        color = curses.color_pair(6) | curses.A_BOLD
+                        if pr_failed:
+                            display_state = "PR_CHECK_FAIL ❌"
+                        elif pr_conflict:
+                            display_state = "PR_CONFLICT ⚠️"
+                        else:
+                            display_state = "PR_REVIEW_ISSUE ⚠️"
+                    elif "AWAITING" in state:
+                        color = curses.color_pair(6) | curses.A_BOLD
+                        display_state = "USER_INPUT_REQ ⚡"
+                    elif ("COMPLETED" in state or "SUCCEEDED" in state or "RESOLVED" in state or "ARCHIVED" in state) and has_pr:
+                        color = curses.color_pair(2)
+                        display_state = "PR_CREATED 🔗"
+                    elif "COMPLETED" in state or "SUCCEEDED" in state or "RESOLVED" in state or "ARCHIVED" in state:
+                        color = curses.color_pair(2)
+                        display_state = state
+                    elif "FEEDBACK" in state or "INPUT" in state or "REVIEW" in state or "PAUSED" in state:
+                        color = curses.color_pair(6) | curses.A_BOLD
+                        display_state = f"{state} ⚠️"
+                    elif ("IN_PROGRESS" in state or "RUNNING" in state) and has_pr:
+                        color = curses.color_pair(1) | curses.A_BOLD
+                        display_state = f"PR_CREATED {braille_icon}"
+                    elif "IN_PROGRESS" in state or "RUNNING" in state:
+                        color = curses.color_pair(1) | curses.A_BOLD
+                        display_state = f"{state} {braille_icon}"
+                    else:
+                        color = curses.color_pair(1)
+                        display_state = state
+
+                    prefix = ">" if i == selected_idx else " "
+                    local_num = i + 1
+
+                    if width < 80:
+                        short_state = display_state.replace("AWAITING_USER_FEEDBACK", "FEEDBACK").replace("IN_PROGRESS", "RUNNING").replace("STUCK_PATCH", "STUCK").replace("UNASSIGNED_PR", "PR_UNASSIGNED")
+                        meta_prefix = f"{prefix} [#{local_num}] {short_state[:14]} | "
+                    elif width < 120:
+                        short_state = display_state.replace("AWAITING_USER_FEEDBACK", "FEEDBACK")
+                        meta_prefix = f"{prefix} [#{local_num:<2}] {short_state:<20} | "
+                    else:
+                        meta_prefix = f"{prefix} [#{local_num:<2}] {display_state:<28} | "
+
+                    meta_len = len(meta_prefix)
+                    title_width = max(10, width - meta_len - 3)
+                    wrapped_title = textwrap.wrap(title, title_width) or [title]
+
+                    start_y = curr_y
+
+                    # Draw first line with metadata prefix
+                    line1 = f"{meta_prefix}{wrapped_title[0]}"[:width-2]
                     try:
                         if i == selected_idx:
                             stdscr.attron(curses.color_pair(5) | curses.A_BOLD)
-                            stdscr.addstr(curr_y, 1, indented_line)
+                            stdscr.addstr(curr_y, 1, line1)
                             stdscr.attroff(curses.color_pair(5) | curses.A_BOLD)
                         else:
                             stdscr.attron(color)
-                            stdscr.addstr(curr_y, 1, indented_line)
+                            stdscr.addstr(curr_y, 1, line1)
                             stdscr.attroff(color)
                     except Exception:
                         pass
+
                     curr_y += 1
 
-                session_row_map[i] = (start_y, curr_y - 1)
+                    # Draw wrapped title lines indented under the title column
+                    for extra_line in wrapped_title[1:]:
+                        if curr_y >= max_y:
+                            break
+                        indented_line = f"{' ' * meta_len}{extra_line}"[:width-2]
+                        try:
+                            if i == selected_idx:
+                                stdscr.attron(curses.color_pair(5) | curses.A_BOLD)
+                                stdscr.addstr(curr_y, 1, indented_line)
+                                stdscr.attroff(curses.color_pair(5) | curses.A_BOLD)
+                            else:
+                                stdscr.attron(color)
+                                stdscr.addstr(curr_y, 1, indented_line)
+                                stdscr.attroff(color)
+                        except Exception:
+                            pass
+                        curr_y += 1
 
-        # Action notification message line
-        if action_msg:
-            msg_y = height - 1 - footer_height
-            if 0 <= msg_y < height:
-                try:
-                    stdscr.attron(curses.color_pair(3) | curses.A_BOLD)
-                    stdscr.addstr(msg_y, 1, action_msg[:width-2])
-                    stdscr.attroff(curses.color_pair(3) | curses.A_BOLD)
-                except Exception:
-                    pass
+                    session_row_map[i] = (start_y, curr_y - 1)
 
-        # Persistent Multi-Line Footer / Keybindings bar (Centered safely)
-        for idx, f_line in enumerate(footer_lines):
-            f_y = height - footer_height + idx
-            if 0 <= f_y < height:
-                try:
-                    stdscr.attron(curses.color_pair(1))
-                    stdscr.addstr(f_y, 0, f_line.center(width)[:width-1])
-                    stdscr.attroff(curses.color_pair(1))
-                except Exception:
-                    pass
-        stdscr.attroff(curses.color_pair(1))
+            # Action notification message line
+            if action_msg:
+                msg_y = height - 1 - footer_height
+                if 0 <= msg_y < height:
+                    try:
+                        stdscr.attron(curses.color_pair(3) | curses.A_BOLD)
+                        stdscr.addstr(msg_y, 1, action_msg[:width-2])
+                        stdscr.attroff(curses.color_pair(3) | curses.A_BOLD)
+                    except Exception:
+                        pass
+
+            # Persistent Multi-Line Footer / Keybindings bar (Centered safely)
+            for idx, f_line in enumerate(footer_lines):
+                f_y = height - footer_height + idx
+                if 0 <= f_y < height:
+                    try:
+                        stdscr.attron(curses.color_pair(1))
+                        stdscr.addstr(f_y, 0, f_line.center(width)[:width-1])
+                        stdscr.attroff(curses.color_pair(1))
+                    except Exception:
+                        pass
+            try:
+                stdscr.attroff(curses.color_pair(1))
+            except Exception:
+                pass
+        except Exception as e:
+            from jules_manager import log_action
+            log_action("SYSTEM", "TUI_RENDER_ERR", f"Render loop caught error: {e}")
 
         stdscr.refresh()
         stdscr.timeout(150)
