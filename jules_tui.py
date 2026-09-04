@@ -213,7 +213,7 @@ def check_session_pr_status(session):
 
 def get_unassigned_jules_prs(active_sessions):
     """
-    Scans local repositories in ~/Projects for open Jules PRs or feature branches
+    Scans local repositories in ~/Projects in parallel for open Jules PRs or feature branches
     that do NOT have an active API session assigned to them, creating synthetic session objects.
     """
     active_sids = set()
@@ -226,56 +226,66 @@ def get_unassigned_jules_prs(active_sessions):
     if not os.path.exists(projects_dir):
         return unassigned_items
 
+    repo_paths = []
     for repo_name in os.listdir(projects_dir):
         repo_path = os.path.join(projects_dir, repo_name)
-        if not (os.path.isdir(repo_path) and os.path.exists(os.path.join(repo_path, ".git"))):
-            continue
+        if os.path.isdir(repo_path) and os.path.exists(os.path.join(repo_path, ".git")):
+            repo_paths.append((repo_name, repo_path))
 
+    from concurrent.futures import ThreadPoolExecutor
+
+    def scan_repo(item):
+        repo_name, repo_path = item
+        items = []
         try:
-            res = subprocess.run(["gh", "pr", "list", "--state", "open", "--json", "number,title,headRefName,url,mergeable,statusCheckRollup,comments,reviews"], cwd=repo_path, capture_output=True, text=True)
-            if res.returncode != 0:
-                continue
-            prs = json.loads(res.stdout)
-            for pr in prs:
-                title = pr.get("title", "")
-                branch = pr.get("headRefName", "")
-                num = pr.get("number")
-                url = pr.get("url", "")
-                
-                is_jules = (
-                    "jules" in branch.lower() 
-                    or "jules" in title.lower() 
-                    or title.startswith(("🛡️", "⚡", "🔌", "🌈", "📜", "📦", "🎨", "🧪"))
-                    or (any(char.isdigit() for char in branch.split("-")[-1]) and len(branch.split("-")[-1]) >= 15)
-                )
-                if not is_jules:
-                    continue
+            res = subprocess.run(["gh", "pr", "list", "--state", "open", "--json", "number,title,headRefName,url,mergeable,statusCheckRollup,comments,reviews"], cwd=repo_path, capture_output=True, text=True, timeout=2)
+            if res.returncode == 0:
+                prs = json.loads(res.stdout)
+                for pr in prs:
+                    title = pr.get("title", "")
+                    branch = pr.get("headRefName", "")
+                    num = pr.get("number")
+                    url = pr.get("url", "")
+                    
+                    is_jules = (
+                        "jules" in branch.lower() 
+                        or "jules" in title.lower() 
+                        or title.startswith(("🛡️", "⚡", "🔌", "🌈", "📜", "📦", "🎨", "🧪"))
+                        or (any(char.isdigit() for char in branch.split("-")[-1]) and len(branch.split("-")[-1]) >= 15)
+                    )
+                    if not is_jules:
+                        continue
 
-                # Check if this PR is tied to an active session
-                extracted_sid = branch.split("-")[-1] if "-" in branch else ""
-                if extracted_sid in active_sids:
-                    continue
+                    extracted_sid = branch.split("-")[-1] if "-" in branch else ""
+                    if extracted_sid in active_sids:
+                        continue
 
-                # Virtual session representation for leftover PR
-                synthetic_sid = extracted_sid if (extracted_sid and len(extracted_sid) >= 15) else f"pr-{repo_name}-{num}"
-                unassigned_items.append({
-                    "id": synthetic_sid,
-                    "name": f"sessions/{synthetic_sid}",
-                    "title": f"[{repo_name}] PR #{num}: {title}",
-                    "state": "UNASSIGNED_PR",
-                    "is_unassigned_pr": True,
-                    "pr_number": num,
-                    "repo": repo_name,
-                    "branch": branch,
-                    "url": url,
-                    "prompt": f"Unassigned Jules PR #{num} in {repo_name} ({branch}): {title}\nURL: {url}",
-                    "sourceContext": {
-                        "source": f"sources/github/Vikyek/{repo_name}",
-                        "githubRepoContext": {"startingBranch": branch}
-                    }
-                })
+                    synthetic_sid = extracted_sid if (extracted_sid and len(extracted_sid) >= 15) else f"pr-{repo_name}-{num}"
+                    items.append({
+                        "id": synthetic_sid,
+                        "name": f"sessions/{synthetic_sid}",
+                        "title": f"[{repo_name}] PR #{num}: {title}",
+                        "state": "UNASSIGNED_PR",
+                        "is_unassigned_pr": True,
+                        "pr_number": num,
+                        "repo": repo_name,
+                        "branch": branch,
+                        "url": url,
+                        "prompt": f"Unassigned Jules PR #{num} in {repo_name} ({branch}): {title}\nURL: {url}",
+                        "sourceContext": {
+                            "source": f"sources/github/Vikyek/{repo_name}",
+                            "githubRepoContext": {"startingBranch": branch}
+                        }
+                    })
         except Exception:
             pass
+        return items
+
+    with ThreadPoolExecutor(max_workers=min(8, max(1, len(repo_paths)))) as executor:
+        results = list(executor.map(scan_repo, repo_paths))
+
+    for sublist in results:
+        unassigned_items.extend(sublist)
 
     return unassigned_items
 

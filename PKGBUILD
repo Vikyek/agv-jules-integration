@@ -6,7 +6,7 @@ pkgdesc="Google Jules API Manager, Listener Daemon, Interactive TUI, and Conky H
 arch=('any')
 url="https://github.com/Vikyek/jules-vanager"
 license=('GPL-3.0-only')
-depends=('python' 'python-requests' 'gh' 'systemd')
+depends=('python' 'python-requests' 'github-cli' 'systemd')
 optdepends=(
     'xclip: Clipboard support for X11'
     'wl-clipboard: Clipboard support for Wayland'
