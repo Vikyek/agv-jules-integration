@@ -2322,7 +2322,7 @@ def prompt_reply(stdscr, session_id, local_num, preloaded_data=None):
         elif not reply_active and ch in (curses.KEY_DOWN, ord('j')):
             scroll_offset -= 1
             continue
-        elif not reply_active and ch in (ord('r'), ord('R')):
+        elif not reply_active and ch in (ord('r'), ord('R'), curses.KEY_ENTER, 10, 13):
             reply_active = True
             status_err = ""
             continue
