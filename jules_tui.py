@@ -367,31 +367,20 @@ def draw_menu(stdscr):
         pass
     try:
         curses.use_default_colors()
+        bg_col = -1
     except Exception:
-        pass
+        bg_col = curses.COLOR_BLACK
+
     try:
-        curses.mousemask(curses.ALL_MOUSE_EVENTS | curses.REPORT_MOUSE_POSITION)
-    except Exception:
-        pass
-    try:
-        curses.init_pair(1, curses.COLOR_YELLOW, -1)           # Main text (Yellow)
-        curses.init_pair(2, curses.COLOR_GREEN, -1)            # Completed state (Green)
-        curses.init_pair(3, curses.COLOR_RED, -1)              # Feedback / Warning (Red)
+        curses.init_pair(1, curses.COLOR_YELLOW, bg_col)           # Main text (Yellow)
+        curses.init_pair(2, curses.COLOR_GREEN, bg_col)            # Completed state (Green)
+        curses.init_pair(3, curses.COLOR_RED, bg_col)              # Feedback / Warning (Red)
         curses.init_pair(4, curses.COLOR_RED, curses.COLOR_YELLOW) # Topbar: Yellow background with Red text
         curses.init_pair(5, curses.COLOR_BLACK, curses.COLOR_YELLOW) # Highlighted selection: Yellow background with Black text
         curses.init_pair(6, curses.COLOR_BLACK, curses.COLOR_RED)    # Unresolvable / Critical Alert: Red background with Black text
-        curses.init_pair(7, curses.COLOR_CYAN, -1)             # Cyan text (Suggestions / Details)
+        curses.init_pair(7, curses.COLOR_CYAN, bg_col)             # Cyan text (Suggestions / Details)
     except Exception:
-        try:
-            curses.init_pair(1, curses.COLOR_YELLOW, curses.COLOR_BLACK)
-            curses.init_pair(2, curses.COLOR_GREEN, curses.COLOR_BLACK)
-            curses.init_pair(3, curses.COLOR_RED, curses.COLOR_BLACK)
-            curses.init_pair(4, curses.COLOR_RED, curses.COLOR_YELLOW)
-            curses.init_pair(5, curses.COLOR_BLACK, curses.COLOR_YELLOW)
-            curses.init_pair(6, curses.COLOR_BLACK, curses.COLOR_RED)
-            curses.init_pair(7, curses.COLOR_CYAN, curses.COLOR_BLACK)
-        except Exception:
-            pass
+        pass
 
     SESSIONS_CACHE_FILE = os.path.expanduser("~/.config/jules-vanager/sessions_cache.json")
 
