@@ -678,7 +678,9 @@ def draw_menu(stdscr):
                     fetch_status_str = f" {braille_icon} Syncing details ({loaded_count}/{total_count})..." if total_count > 0 else f" {braille_icon} Syncing..."
                 else:
                     fetch_status_str = ""
-                stdscr.addstr(3, 1, f"ACTIVE SESSIONS:{fetch_status_str}", curses.A_BOLD)
+                stdscr.attron(curses.color_pair(1) | curses.A_BOLD)
+                stdscr.addstr(3, 1, f"ACTIVE SESSIONS:{fetch_status_str}")
+                stdscr.attroff(curses.color_pair(1) | curses.A_BOLD)
             except Exception:
                 pass
             
