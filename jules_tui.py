@@ -433,6 +433,7 @@ def draw_menu(stdscr):
     scroll_top = 0
     sessions_cache = load_cached_sessions()
     archived_sessions_cache = []
+    _ARCHIVED_CACHE_TIME = 0
     suggestions_cache = []
     details_cache = {}
     pr_status_cache = {}
@@ -507,24 +508,29 @@ def draw_menu(stdscr):
                         except Exception:
                             pass
 
-                # 2. Preload Archived Sessions Collection & Suggestions in Parallel
-                try:
-                    with ThreadPoolExecutor(max_workers=2) as executor:
-                        f_arch = executor.submit(list_sessions, True)
+                # 2. Preload Archived Sessions Collection & Suggestions in Parallel (cached 300s)
+                now_cache = time.time()
+                if (now_cache - _ARCHIVED_CACHE_TIME > 300) or not archived_sessions_cache:
+                    try:
+                        executor_arch = ThreadPoolExecutor(max_workers=2)
+                        f_arch = executor_arch.submit(list_sessions, True)
                         from jules_scraper import fetch_jules_suggestions
-                        f_sugs = executor.submit(fetch_jules_suggestions, False)
+                        f_sugs = executor_arch.submit(fetch_jules_suggestions, False)
+                        
                         arch_res = f_arch.result(timeout=5)
                         new_sugs = f_sugs.result(timeout=5)
+                        executor_arch.shutdown(wait=False)
 
-                    raw_arch = arch_res.get("sessions", []) if isinstance(arch_res, dict) else []
-                    new_archived = [s for s in raw_arch if s.get("archived") or s.get("state") in ("ARCHIVED", "COMPLETED", "SUCCEEDED", "RESOLVED", "MERGED", "CLOSED")]
-                    new_archived.sort(key=lambda x: x.get("updateTime") or x.get("createTime") or "")
+                        raw_arch = arch_res.get("sessions", []) if isinstance(arch_res, dict) else []
+                        new_archived = [s for s in raw_arch if s.get("archived") or s.get("state") in ("ARCHIVED", "COMPLETED", "SUCCEEDED", "RESOLVED", "MERGED", "CLOSED")]
+                        new_archived.sort(key=lambda x: x.get("updateTime") or x.get("createTime") or "")
 
-                    with fetch_lock:
-                        archived_sessions_cache = new_archived
-                        suggestions_cache = new_sugs
-                except Exception:
-                    pass
+                        with fetch_lock:
+                            archived_sessions_cache = new_archived
+                            suggestions_cache = new_sugs
+                            _ARCHIVED_CACHE_TIME = now_cache
+                    except Exception:
+                        pass
 
                 with fetch_lock:
                     details_cache.update(new_details)
