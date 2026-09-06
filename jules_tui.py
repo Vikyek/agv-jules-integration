@@ -1446,12 +1446,14 @@ def prompt_suggestions_panel(stdscr, preloaded_suggestions=None):
                 details = sug.get("details", "")
                 raw_repo = sug.get("repo", "Vikyek/paru-wrapper")
                 repo = raw_repo.split("/")[-1] if "/" in raw_repo else raw_repo
+                src_tag = sug.get("source", "sdk")
+                src_badge = f"[{src_tag}]" if src_tag in ("jules-awesome-list", "jules-action", "jules-sdk") else ""
 
                 start_y = curr_y
                 is_selected = (i in selected_set)
                 chk = "[x]" if is_selected else "[ ]"
                 cursor_mark = ">" if i == selected_idx else " "
-                line1 = f"{cursor_mark} {chk} [#{i+1}] [{repo}] {title}"[:width-2]
+                line1 = f"{cursor_mark} {chk} [#{i+1}] [{repo}] {src_badge} {title}"[:width-2]
 
                 is_completed_or_verified = agy_task_status.get(title) in ("COMPLETED ✅", "VERIFIED DONE ✅") or title.strip() in dismissed_set
 
