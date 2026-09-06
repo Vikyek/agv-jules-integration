@@ -250,6 +250,36 @@ def fetch_jules_suggestions(raw_html_snippet=None, filter_dismissed=True):
                 "source": "scraped_snippet"
             },
             {
+                "title": "Jules SDK: Convert CommonJS requires to ES modules",
+                "details": "Refactor repository imports to standard ES module syntax (import/export).",
+                "repo": "Vikyek/jules-vanager",
+                "source": "jules-awesome-list"
+            },
+            {
+                "title": "Jules Action: Run npm audit & fix vulnerabilities",
+                "details": "Run security audit and resolve package dependency vulnerabilities automatically.",
+                "repo": "Vikyek/paru-wrapper",
+                "source": "jules-action"
+            },
+            {
+                "title": "Jules SDK: Add async/await error boundary wrapper",
+                "details": "Wrap asynchronous network calls in structured try/catch blocks with logging.",
+                "repo": "Vikyek/jules-vanager",
+                "source": "jules-awesome-list"
+            },
+            {
+                "title": "Jules Action: Generate missing integration tests",
+                "details": "Create test suites covering API endpoints and CLI utility commands.",
+                "repo": "Vikyek/jules-vanager",
+                "source": "jules-action"
+            },
+            {
+                "title": "Jules SDK: Convert callbacks to Async/Await promises",
+                "details": "Refactor legacy asynchronous callback patterns to async/await syntax.",
+                "repo": "Vikyek/paru-wrapper",
+                "source": "jules-awesome-list"
+            },
+            {
                 "title": "Subprocess pacman -Si N+1 in for loop",
                 "details": "Optimize package info checks using single pacman -Si batch call.",
                 "repo": "Vikyek/paru-wrapper",
@@ -264,18 +294,6 @@ def fetch_jules_suggestions(raw_html_snippet=None, filter_dismissed=True):
             {
                 "title": "Command Option Injection via Untrusted Package Names",
                 "details": "Sanitize pacman CLI arguments with -- option end demarcator.",
-                "repo": "Vikyek/paru-wrapper",
-                "source": "scraped_snippet"
-            },
-            {
-                "title": "Missing URL Encoding in AUR query",
-                "details": "Use urllib.parse.quote for package names in query_aur.",
-                "repo": "Vikyek/paru-wrapper",
-                "source": "scraped_snippet"
-            },
-            {
-                "title": "Missing URL Encoding in cURL Command",
-                "details": "Escape special query characters in network command invocations.",
                 "repo": "Vikyek/paru-wrapper",
                 "source": "scraped_snippet"
             }
