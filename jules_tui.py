@@ -146,6 +146,9 @@ def check_session_stuck_or_plan_loop(session_id, preloaded_activities=None, prel
         pass
     return False, ""
 
+_SESSION_PR_STATUS_CACHE = {}
+_SESSION_PR_STATUS_CACHE_TIME = {}
+
 def check_session_pr_status(session):
     """
     Checks PR details for a session, returning status flags:
@@ -158,6 +161,11 @@ def check_session_pr_status(session):
     if not session:
         return default_res
     sid = session.get("id") or session.get("name", "").split("/")[-1]
+    
+    now = time.time()
+    if sid in _SESSION_PR_STATUS_CACHE and (now - _SESSION_PR_STATUS_CACHE_TIME.get(sid, 0)) < 45:
+        return _SESSION_PR_STATUS_CACHE[sid]
+
     src_ctx = session.get("sourceContext", {})
     rep_name = src_ctx.get("source", "").replace("sources/github/", "").replace("sources/", "")
     if not rep_name:
@@ -165,9 +173,11 @@ def check_session_pr_status(session):
     projects_dir = os.path.expanduser("~/Projects")
     repo_path = os.path.join(projects_dir, os.path.basename(rep_name))
     if not os.path.exists(os.path.join(repo_path, ".git")):
+        _SESSION_PR_STATUS_CACHE[sid] = default_res
+        _SESSION_PR_STATUS_CACHE_TIME[sid] = now
         return default_res
     try:
-        res = subprocess.run(["gh", "pr", "list", "--state", "all", "--json", "number,title,headRefName,url,mergeable,reviewDecision,statusCheckRollup,comments,reviews"], cwd=repo_path, capture_output=True, text=True)
+        res = subprocess.run(["gh", "pr", "list", "--state", "all", "--json", "number,title,headRefName,url,mergeable,reviewDecision,statusCheckRollup,comments,reviews"], cwd=repo_path, capture_output=True, text=True, timeout=3)
         if res.returncode == 0:
             prs = json.loads(res.stdout)
             for pr in prs:
@@ -205,7 +215,7 @@ def check_session_pr_status(session):
                     # 3. Check if branch needs update / rebase
                     needs_update = mergeable in ("CONFLICTING", "BEHIND")
 
-                    return {
+                    res_obj = {
                         "has_pr": True,
                         "pr_number": num,
                         "status_checks_failing": checks_failing,
@@ -214,15 +224,28 @@ def check_session_pr_status(session):
                         "needs_update": needs_update,
                         "url": url
                     }
+                    _SESSION_PR_STATUS_CACHE[sid] = res_obj
+                    _SESSION_PR_STATUS_CACHE_TIME[sid] = now
+                    return res_obj
     except Exception:
         pass
+    _SESSION_PR_STATUS_CACHE[sid] = default_res
+    _SESSION_PR_STATUS_CACHE_TIME[sid] = now
     return default_res
+
+_UNASSIGNED_PRS_CACHE = None
+_UNASSIGNED_PRS_CACHE_TIME = 0
 
 def get_unassigned_jules_prs(active_sessions):
     """
     Scans local repositories in ~/Projects in parallel for open Jules PRs or feature branches
     that do NOT have an active API session assigned to them, creating synthetic session objects.
     """
+    global _UNASSIGNED_PRS_CACHE, _UNASSIGNED_PRS_CACHE_TIME
+    now = time.time()
+    if _UNASSIGNED_PRS_CACHE is not None and (now - _UNASSIGNED_PRS_CACHE_TIME) < 60:
+        return _UNASSIGNED_PRS_CACHE
+
     active_sids = set()
     for s in active_sessions:
         sid = s.get("id") or s.get("name", "").split("/")[-1]
@@ -231,6 +254,8 @@ def get_unassigned_jules_prs(active_sessions):
     unassigned_items = []
     projects_dir = os.path.expanduser("~/Projects")
     if not os.path.exists(projects_dir):
+        _UNASSIGNED_PRS_CACHE = unassigned_items
+        _UNASSIGNED_PRS_CACHE_TIME = now
         return unassigned_items
 
     repo_paths = []
@@ -312,6 +337,8 @@ def get_unassigned_jules_prs(active_sessions):
     for sublist in results:
         unassigned_items.extend(sublist)
 
+    _UNASSIGNED_PRS_CACHE = unassigned_items
+    _UNASSIGNED_PRS_CACHE_TIME = now
     return unassigned_items
 
 def open_session_pr(session):
