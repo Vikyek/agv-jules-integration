@@ -545,11 +545,15 @@ def draw_menu(stdscr):
         t = threading.Thread(target=run_work, daemon=True)
         t.start()
 
-    # Startup check: If system autostart is disabled, open with listener turned off
-    enabled_check = subprocess.run(["systemctl", "--user", "is-enabled", "jules-listener.service"], capture_output=True, text=True)
-    is_autostart = "enabled" in enabled_check.stdout.strip()
-    if not is_autostart:
-        subprocess.run(["systemctl", "--user", "stop", "jules-listener.service"], capture_output=True, text=True)
+    # Startup check: If system autostart is disabled, stop listener service asynchronously
+    def check_autostart_bg():
+        try:
+            enabled_check = subprocess.run(["systemctl", "--user", "is-enabled", "jules-listener.service"], capture_output=True, text=True)
+            if "enabled" not in enabled_check.stdout.strip():
+                subprocess.run(["systemctl", "--user", "stop", "jules-listener.service"], capture_output=True, text=True)
+        except Exception:
+            pass
+    threading.Thread(target=check_autostart_bg, daemon=True).start()
 
     listen_frames = ["⣾", "⣽", "⣻", "⢿", "⡿", "⣟", "⣯", "⣷"]
     braille_swirl = ["⣾", "⣽", "⣻", "⢿", "⡿", "⣟", "⣯", "⣷"]
